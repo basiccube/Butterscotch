@@ -7,6 +7,9 @@ add_compile_options(-Wall -Wextra)
 
 set(PLATFORM "" CACHE STRING "Platform backend")
 
+option(BUILD_RUNNER "Build the Butterscotch runtime executable" ON)
+option(BUILD_PREPROCESSOR "Build the data.win preprocessor tool" OFF)
+
 # Build metadata
 set(BUTTERSCOTCH_COMMIT_HASH "unknown" CACHE STRING "Git commit hash")
 set(BUTTERSCOTCH_COMMIT_DATE "unknown" CACHE STRING "Git commit date")
@@ -15,8 +18,8 @@ add_compile_definitions(
     BUTTERSCOTCH_COMMIT_DATE="${BUTTERSCOTCH_COMMIT_DATE}"
 )
 
-if(PLATFORM STREQUAL "")
-    message(FATAL_ERROR "PLATFORM is not set! Use -DPLATFORM=glfw (or another supported platform).")
+if(BUILD_RUNNER AND PLATFORM STREQUAL "")
+    message(FATAL_ERROR "PLATFORM is not set! Use -DPLATFORM=glfw (or another supported platform). Or pass -DBUILD_RUNNER=OFF -DBUILD_PREPROCESSOR=ON to build only the preprocessor.")
 endif()
 
 # To avoid unused code in production builds that are only used for a single game (example: PlayStation 2 target), we can enable/disable specific bytecode versions
@@ -35,6 +38,7 @@ if(ENABLE_BC17)
     add_compile_definitions(ENABLE_BC17)
 endif()
 
+if(BUILD_RUNNER)
 file(GLOB SOURCES src/*.c)
 # Platform specific files builds
 file(GLOB PLATFORM_SOURCES src/${PLATFORM}/*.c)
@@ -53,8 +57,9 @@ target_include_directories(butterscotch PUBLIC vendor/stb/ds)
 
 if(PLATFORM STREQUAL "glfw")
     file(GLOB GL_SOURCES src/gl/*.c)
-    target_sources(butterscotch PRIVATE ${GL_SOURCES})
-    target_include_directories(butterscotch PRIVATE ${CMAKE_SOURCE_DIR}/src/gl)
+    file(GLOB IMAGE_SOURCES src/image/*.c)
+    target_sources(butterscotch PRIVATE ${GL_SOURCES} ${IMAGE_SOURCES})
+    target_include_directories(butterscotch PRIVATE ${CMAKE_SOURCE_DIR}/src/gl ${CMAKE_SOURCE_DIR}/src/image)
 
     # Butterscotch VM/interpreter profiler
     option(ENABLE_VM_GML_PROFILER "Enable Butterscotch VM/interpreter profiler" ON)
@@ -334,4 +339,30 @@ elseif(PLATFORM STREQUAL "ps2")
     endif()
 else()
     message(FATAL_ERROR "Unknown platform! ${PLATFORM}")
+endif()
+endif() # BUILD_RUNNER
+
+# ===[ butterscotch-preprocessor: data.win -> .BIN preprocessor ]===
+if(BUILD_PREPROCESSOR)
+    file(GLOB PREPROCESSOR_SOURCES src/preprocessor/*.c)
+    add_executable(butterscotch-preprocessor
+        ${PREPROCESSOR_SOURCES}
+        src/data_win.c
+        src/binary_reader.c
+        src/image/image_decoder.c
+    )
+    target_include_directories(butterscotch-preprocessor PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+        ${CMAKE_SOURCE_DIR}/src/image
+        ${CMAKE_SOURCE_DIR}/src/preprocessor
+        ${CMAKE_SOURCE_DIR}/vendor/stb/ds
+        ${CMAKE_SOURCE_DIR}/vendor/stb/image
+        ${CMAKE_SOURCE_DIR}/vendor/stb/vorbis
+    )
+    if(MINGW)
+        target_link_libraries(butterscotch-preprocessor m bz2)
+        target_link_options(butterscotch-preprocessor PRIVATE -static)
+    else()
+        target_link_libraries(butterscotch-preprocessor m bz2)
+    endif()
 endif()
