@@ -1,6 +1,7 @@
 // PS3GL - An OpenGL 1.5 Compatibility Layer on top of the RSX API
 
 #include "GL/gl.h"
+#include "ps3gl.h"
 #include <stdint.h>
 // TODO: Move the rsxutil functionality into ps3glInit
 #include "rsxutil.h"
@@ -1035,6 +1036,347 @@ void glBlendColor( GLclampf red, GLclampf green,
 }
 
 
+/*
+ * Shaders / Programs
+ */
+
+static struct ps3gl_shader* lookupShader(GLuint id)
+{
+	if (id == 0 || id >= MAX_SHADERS) return NULL;
+	if (!_opengl_state.shaders[id].allocated) return NULL;
+	return &_opengl_state.shaders[id];
+}
+
+static struct ps3gl_program* lookupProgram(GLuint id)
+{
+	if (id == 0 || id >= MAX_PROGRAMS) return NULL;
+	if (!_opengl_state.programs[id].allocated) return NULL;
+	return &_opengl_state.programs[id];
+}
+
+GLuint glCreateShader(GLenum type)
+{
+	if (type != GL_VERTEX_SHADER && type != GL_FRAGMENT_SHADER) return 0;
+	for (GLuint i = 1; i < MAX_SHADERS; i++) {
+		if (!_opengl_state.shaders[i].allocated) {
+			struct ps3gl_shader *s = &_opengl_state.shaders[i];
+			s->allocated = true;
+			s->type = type;
+			s->blob = NULL;
+			s->blobSize = 0;
+			s->fpUcode = NULL;
+			s->fpOffset = 0;
+			return i;
+		}
+	}
+	return 0;
+}
+
+void glShaderBinary(GLsizei count, const GLuint *shaders, GLenum binaryFormat, const void *binary, GLsizei length)
+{
+	if (count != 1 || shaders == NULL || binary == NULL || length <= 0) return;
+	struct ps3gl_shader *s = lookupShader(shaders[0]);
+	if (s == NULL) return;
+
+	if (binaryFormat == PS3GL_SHADER_BINARY_VPO && s->type != GL_VERTEX_SHADER) return;
+	if (binaryFormat == PS3GL_SHADER_BINARY_FPO && s->type != GL_FRAGMENT_SHADER) return;
+
+	if (s->blob != NULL) free(s->blob);
+	s->blob = malloc(length);
+	memcpy(s->blob, binary, length);
+	s->blobSize = length;
+
+	if (s->type == GL_FRAGMENT_SHADER) {
+		// FP ucode must live in RSX-visible memory.
+		rsxFragmentProgram *prog = (rsxFragmentProgram*)s->blob;
+		void *ucode = NULL;
+		u32 ucodeSize = 0;
+		rsxFragmentProgramGetUCode(prog, &ucode, &ucodeSize);
+
+		if (s->fpUcode != NULL) rsxFree(s->fpUcode);
+		s->fpUcode = rsxMemalign(64, ucodeSize);
+		memcpy(s->fpUcode, ucode, ucodeSize);
+		rsxAddressToOffset(s->fpUcode, &s->fpOffset);
+	}
+}
+
+void glDeleteShader(GLuint shader)
+{
+	struct ps3gl_shader *s = lookupShader(shader);
+	if (s == NULL) return;
+	if (s->blob != NULL) { free(s->blob); s->blob = NULL; }
+	if (s->fpUcode != NULL) { rsxFree(s->fpUcode); s->fpUcode = NULL; }
+	s->allocated = false;
+}
+
+void glGetShaderiv(GLuint shader, GLenum pname, GLint *params)
+{
+	if (params == NULL) return;
+	struct ps3gl_shader *s = lookupShader(shader);
+	if (pname == GL_COMPILE_STATUS) {
+		*params = (s != NULL && s->blob != NULL) ? GL_TRUE : GL_FALSE;
+	} else if (pname == GL_INFO_LOG_LENGTH) {
+		*params = 0;
+	}
+}
+
+GLuint glCreateProgram(void)
+{
+	for (GLuint i = 1; MAX_PROGRAMS > i; i++) {
+		if (!_opengl_state.programs[i].allocated) {
+			struct ps3gl_program *p = &_opengl_state.programs[i];
+			p->allocated = true;
+			p->linked = false;
+			p->vertexShader = 0;
+			p->fragmentShader = 0;
+			p->uniformCount = 0;
+			return i;
+		}
+	}
+	return 0;
+}
+
+void glAttachShader(GLuint program, GLuint shader)
+{
+	struct ps3gl_program *p = lookupProgram(program);
+	struct ps3gl_shader *s = lookupShader(shader);
+	if (p == NULL || s == NULL) return;
+	if (s->type == GL_VERTEX_SHADER) p->vertexShader = shader;
+	else if (s->type == GL_FRAGMENT_SHADER) p->fragmentShader = shader;
+	p->linked = false;
+}
+
+void glDetachShader(GLuint program, GLuint shader)
+{
+	struct ps3gl_program *p = lookupProgram(program);
+	if (p == NULL) return;
+	if (p->vertexShader == shader) p->vertexShader = 0;
+	if (p->fragmentShader == shader) p->fragmentShader = 0;
+	p->linked = false;
+}
+
+void glLinkProgram(GLuint program)
+{
+	struct ps3gl_program *p = lookupProgram(program);
+	if (p == NULL) return;
+
+	struct ps3gl_shader *vs = lookupShader(p->vertexShader);
+	struct ps3gl_shader *fs = lookupShader(p->fragmentShader);
+	// At least one stage must be attached.
+	// The unattached stage falls back to the FFP shader at draw time.
+	if ((vs == NULL || vs->blob == NULL) && (fs == NULL || fs->blob == NULL)) {
+		p->linked = false;
+		return;
+	}
+
+	p->uniformCount = 0;
+	p->linked = true;
+}
+
+void glUseProgram(GLuint program)
+{
+	if (program == 0) { _opengl_state.active_program = 0; return; }
+	struct ps3gl_program *p = lookupProgram(program);
+	if (p == NULL || !p->linked) return;
+	_opengl_state.active_program = program;
+}
+
+void glDeleteProgram(GLuint program)
+{
+	struct ps3gl_program *p = lookupProgram(program);
+	if (p == NULL) return;
+	if (_opengl_state.active_program == program) _opengl_state.active_program = 0;
+	p->allocated = false;
+	p->linked = false;
+}
+
+void glGetProgramiv(GLuint program, GLenum pname, GLint *params)
+{
+	if (params == NULL) return;
+	struct ps3gl_program *p = lookupProgram(program);
+	if (pname == GL_LINK_STATUS) {
+		*params = (p != NULL && p->linked) ? GL_TRUE : GL_FALSE;
+	} else if (pname == GL_INFO_LOG_LENGTH) {
+		*params = 0;
+	}
+}
+
+// Find or insert a uniform slot for a given name on a linked program.
+static GLint resolveUniform(struct ps3gl_program *p, const GLchar *name)
+{
+	for (GLuint i = 0; p->uniformCount > i; i++) {
+		if (strcmp(p->uniforms[i].name, name) == 0) {
+			return PS3GL_LOC_PACK(p->uniforms[i].stage, i);
+		}
+	}
+	if (p->uniformCount >= MAX_PROGRAM_UNIFORMS) return -1;
+
+	struct ps3gl_shader *vs = lookupShader(p->vertexShader);
+	struct ps3gl_shader *fs = lookupShader(p->fragmentShader);
+
+	if (fs != NULL && fs->blob != NULL) {
+		rsxFragmentProgram *fp = (rsxFragmentProgram*)fs->blob;
+		rsxProgramConst *c = rsxFragmentProgramGetConst(fp, (char*)name);
+		if (c != NULL) {
+			struct ps3gl_program_uniform *u = &p->uniforms[p->uniformCount];
+			strncpy(u->name, name, sizeof(u->name) - 1);
+			u->name[sizeof(u->name) - 1] = '\0';
+			u->stage = PS3GL_LOC_STAGE_FP;
+			u->constHandle = c;
+			u->samplerUnit = -1;
+			u->samplerAttrib = NULL;
+			return PS3GL_LOC_PACK(PS3GL_LOC_STAGE_FP, p->uniformCount++);
+		}
+		// Sampler attribs are not in the const table, they're attribs.
+		rsxProgramAttrib *a = rsxFragmentProgramGetAttrib(fp, (char*)name);
+		if (a != NULL) {
+			struct ps3gl_program_uniform *u = &p->uniforms[p->uniformCount];
+			strncpy(u->name, name, sizeof(u->name) - 1);
+			u->name[sizeof(u->name) - 1] = '\0';
+			u->stage = PS3GL_LOC_STAGE_FP;
+			u->constHandle = NULL;
+			u->samplerUnit = 0;
+			u->samplerAttrib = a;
+			return PS3GL_LOC_PACK(PS3GL_LOC_STAGE_FP, p->uniformCount++);
+		}
+	}
+
+	if (vs != NULL && vs->blob != NULL) {
+		rsxVertexProgram *vp = (rsxVertexProgram*)vs->blob;
+		rsxProgramConst *c = rsxVertexProgramGetConst(vp, (char*)name);
+		if (c != NULL) {
+			struct ps3gl_program_uniform *u = &p->uniforms[p->uniformCount];
+			strncpy(u->name, name, sizeof(u->name) - 1);
+			u->name[sizeof(u->name) - 1] = '\0';
+			u->stage = PS3GL_LOC_STAGE_VP;
+			u->constHandle = c;
+			u->samplerUnit = -1;
+			u->samplerAttrib = NULL;
+			return PS3GL_LOC_PACK(PS3GL_LOC_STAGE_VP, p->uniformCount++);
+		}
+	}
+
+	return -1;
+}
+
+GLint glGetUniformLocation(GLuint program, const GLchar *name)
+{
+	struct ps3gl_program *p = lookupProgram(program);
+	if (p == NULL || !p->linked || name == NULL) return -1;
+	return resolveUniform(p, name);
+}
+
+GLint glGetAttribLocation(GLuint program, const GLchar *name)
+{
+	struct ps3gl_program *p = lookupProgram(program);
+	if (p == NULL || !p->linked || name == NULL) return -1;
+	struct ps3gl_shader *vs = lookupShader(p->vertexShader);
+	if (vs == NULL || vs->blob == NULL) return -1;
+	rsxProgramAttrib *a = rsxVertexProgramGetAttrib((rsxVertexProgram*)vs->blob, (char*)name);
+	if (a == NULL) return -1;
+	return a->index;
+}
+
+static struct ps3gl_program_uniform* uniformAt(GLint location)
+{
+	if (location < 0) return NULL;
+	struct ps3gl_program *p = lookupProgram(_opengl_state.active_program);
+	if (p == NULL) return NULL;
+	GLuint idx = PS3GL_LOC_INDEX(location);
+	if (idx >= p->uniformCount) return NULL;
+	return &p->uniforms[idx];
+}
+
+static struct ps3gl_shader* activeShaderForStage(GLubyte stage)
+{
+	struct ps3gl_program *p = lookupProgram(_opengl_state.active_program);
+	if (p == NULL) return NULL;
+	return lookupShader(stage == PS3GL_LOC_STAGE_VP ? p->vertexShader : p->fragmentShader);
+}
+
+void glUniform1i(GLint location, GLint v0)
+{
+	struct ps3gl_program_uniform *u = uniformAt(location);
+	if (u == NULL) return;
+	// TODO: Implement sampler attributes!
+	if (u->samplerAttrib != NULL) {
+		u->samplerUnit = v0;
+		return;
+	}
+	struct ps3gl_shader *s = activeShaderForStage(u->stage);
+	if (s == NULL || s->blob == NULL) return;
+	if (u->stage == PS3GL_LOC_STAGE_FP) {
+		rsxSetFragmentProgramParameterF32(context, (rsxFragmentProgram*)s->blob, u->constHandle, (float)v0, s->fpOffset, GCM_LOCATION_RSX);
+	} else {
+		float v = (float)v0;
+		rsxSetVertexProgramParameter(context, (rsxVertexProgram*)s->blob, u->constHandle, &v);
+	}
+}
+
+void glUniform1f(GLint location, GLfloat v0)
+{
+	struct ps3gl_program_uniform *u = uniformAt(location);
+	if (u == NULL || u->constHandle == NULL) return;
+	struct ps3gl_shader *s = activeShaderForStage(u->stage);
+	if (s == NULL || s->blob == NULL) return;
+	if (u->stage == PS3GL_LOC_STAGE_FP) {
+		rsxSetFragmentProgramParameterF32(context, (rsxFragmentProgram*)s->blob, u->constHandle, v0, s->fpOffset, GCM_LOCATION_RSX);
+	} else {
+		float v[4] = {v0, 0, 0, 0};
+		rsxSetVertexProgramParameter(context, (rsxVertexProgram*)s->blob, u->constHandle, v);
+	}
+}
+
+void glUniform4fv(GLint location, GLsizei count, const GLfloat *value)
+{
+	if (count != 1 || value == NULL) return;
+	struct ps3gl_program_uniform *u = uniformAt(location);
+	if (u == NULL || u->constHandle == NULL) return;
+	struct ps3gl_shader *s = activeShaderForStage(u->stage);
+	if (s == NULL || s->blob == NULL) return;
+	if (u->stage == PS3GL_LOC_STAGE_FP) {
+		rsxSetFragmentProgramParameterF32Vec4(context, (rsxFragmentProgram*)s->blob, u->constHandle, (float*)value, s->fpOffset, GCM_LOCATION_RSX);
+	} else {
+		rsxSetVertexProgramParameter(context, (rsxVertexProgram*)s->blob, u->constHandle, (float*)value);
+	}
+}
+
+void glUniform2f(GLint location, GLfloat v0, GLfloat v1)
+{
+	GLfloat v[4] = {v0, v1, 0, 0};
+	glUniform4fv(location, 1, v);
+}
+
+void glUniform3f(GLint location, GLfloat v0, GLfloat v1, GLfloat v2)
+{
+	GLfloat v[4] = {v0, v1, v2, 0};
+	glUniform4fv(location, 1, v);
+}
+
+void glUniform4f(GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3)
+{
+	GLfloat v[4] = {v0, v1, v2, v3};
+	glUniform4fv(location, 1, v);
+}
+
+void glUniform3fv(GLint location, GLsizei count, const GLfloat *value)
+{
+	if (count != 1 || value == NULL) return;
+	GLfloat v[4] = {value[0], value[1], value[2], 0};
+	glUniform4fv(location, 1, v);
+}
+
+void glUniformMatrix4fv(GLint location, GLsizei count, GLboolean transpose, const GLfloat *value)
+{
+	if (count != 1 || value == NULL || transpose) return;
+	struct ps3gl_program_uniform *u = uniformAt(location);
+	if (u == NULL || u->constHandle == NULL || u->stage != PS3GL_LOC_STAGE_VP) return;
+	struct ps3gl_shader *s = activeShaderForStage(PS3GL_LOC_STAGE_VP);
+	if (s == NULL || s->blob == NULL) return;
+	rsxSetVertexProgramParameter(context, (rsxVertexProgram*)s->blob, u->constHandle, (float*)value);
+}
+
+
 /* PS3GL Functions */
 
 static void _program_exit_callback(void)
@@ -1084,10 +1426,11 @@ void _ps3gl_load_texture(void)
 
 void glGetFloatv(GLenum pname, GLfloat *params)
 {
-	if(pname == GL_MODELVIEW_MATRIX)
-	{
-		float* mvp = (float*)&_opengl_state.modelview_matrix;
-		__builtin_memcpy(params, mvp, sizeof(float)*16);
+	if (params == NULL) return;
+	if (pname == GL_MODELVIEW_MATRIX) {
+		__builtin_memcpy(params, (float*)&_opengl_state.modelview_matrix, sizeof(float)*16);
+	} else if (pname == GL_PROJECTION_MATRIX) {
+		__builtin_memcpy(params, (float*)&_opengl_state.projection_matrix, sizeof(float)*16);
 	}
 }
 
@@ -1193,19 +1536,54 @@ void _setup_draw_env(void)
 	// Load Current Texture
 	_ps3gl_load_texture();
 
-	// Load Shader and Set Uniforms
-	rsxLoadVertexProgram(context,vpo,vp_ucode);
-	rsxSetVertexProgramParameter(context,vpo,_opengl_state.prog_consts[PS3GL_Uniform_ModelViewMatrix],(float*)&_opengl_state.modelview_matrix);
-	rsxSetVertexProgramParameter(context,vpo,_opengl_state.prog_consts[PS3GL_Uniform_ProjectionMatrix],(float*)&_opengl_state.projection_matrix);
+	// Resolve which programs to actually run this draw.
+	// If the user has glUseProgram'd a custom program, then use the attached shader for each stage, otherwise fall back to the FFP for that stage.
+	rsxVertexProgram *useVpo = vpo;
+	void *useVpUcode = vp_ucode;
+	rsxFragmentProgram *useFpo = fpo;
+	u32 useFpOffset = fp_offset;
+	bool ffpFp = true;
+	bool ffpVp = true;
 
-	// For some reason rsxSetFragmentProgramParameter is broken with GCC 15.2.0
-	// so we need to use our own replacements (Located in ps3gl_helpers.h)
-	// to make sure code works independently of compiler version
-	rsxLoadFragmentProgramLocation(context,fpo,fp_offset,GCM_LOCATION_RSX);
-	rsxSetFragmentProgramParameterBool(context,fpo,_opengl_state.prog_consts[PS3GL_Uniform_TextureEnabled],_opengl_state.texture0_enabled,fp_offset,GCM_LOCATION_RSX);
-	rsxSetFragmentProgramParameterBool(context,fpo,_opengl_state.prog_consts[PS3GL_Uniform_FogEnabled],_opengl_state.fog_enabled,fp_offset,GCM_LOCATION_RSX);
-	rsxSetFragmentProgramParameterF32(context,fpo,_opengl_state.prog_consts[PS3GL_Uniform_TextureMode],_opengl_state.texEnvMode,fp_offset,GCM_LOCATION_RSX);
-	rsxSetFragmentProgramParameterF32Vec4(context,fpo,_opengl_state.prog_consts[PS3GL_Uniform_FogColor],_opengl_state.fog_color,fp_offset,GCM_LOCATION_RSX);
+	if (_opengl_state.active_program != 0) {
+		struct ps3gl_program *p = &_opengl_state.programs[_opengl_state.active_program];
+		if (p->allocated && p->linked) {
+			if (p->vertexShader != 0) {
+				struct ps3gl_shader *vs = &_opengl_state.shaders[p->vertexShader];
+				if (vs->allocated && vs->blob != NULL) {
+					useVpo = (rsxVertexProgram*)vs->blob;
+					u32 sz = 0;
+					rsxVertexProgramGetUCode(useVpo, &useVpUcode, &sz);
+					ffpVp = false;
+				}
+			}
+			if (p->fragmentShader != 0) {
+				struct ps3gl_shader *fs = &_opengl_state.shaders[p->fragmentShader];
+				if (fs->allocated && fs->blob != NULL && fs->fpUcode != NULL) {
+					useFpo      = (rsxFragmentProgram*)fs->blob;
+					useFpOffset = fs->fpOffset;
+					ffpFp       = false;
+				}
+			}
+		}
+	}
+
+	rsxLoadVertexProgram(context, useVpo, useVpUcode);
+	rsxLoadFragmentProgramLocation(context, useFpo, useFpOffset, GCM_LOCATION_RSX);
+
+	if (ffpVp) {
+		// FFP vertex program: push the matrix uniforms it expects.
+		rsxSetVertexProgramParameter(context, useVpo, _opengl_state.prog_consts[PS3GL_Uniform_ModelViewMatrix],  (float*)&_opengl_state.modelview_matrix);
+		rsxSetVertexProgramParameter(context, useVpo, _opengl_state.prog_consts[PS3GL_Uniform_ProjectionMatrix], (float*)&_opengl_state.projection_matrix);
+	}
+
+	if (ffpFp) {
+		// FFP FP: push its baked uniforms.
+		rsxSetFragmentProgramParameterBool(context, useFpo, _opengl_state.prog_consts[PS3GL_Uniform_TextureEnabled], _opengl_state.texture0_enabled, useFpOffset, GCM_LOCATION_RSX);
+		rsxSetFragmentProgramParameterBool(context, useFpo, _opengl_state.prog_consts[PS3GL_Uniform_FogEnabled], _opengl_state.fog_enabled, useFpOffset, GCM_LOCATION_RSX);
+		rsxSetFragmentProgramParameterF32(context, useFpo, _opengl_state.prog_consts[PS3GL_Uniform_TextureMode], _opengl_state.texEnvMode, useFpOffset, GCM_LOCATION_RSX);
+		rsxSetFragmentProgramParameterF32Vec4(context, useFpo, _opengl_state.prog_consts[PS3GL_Uniform_FogColor],  _opengl_state.fog_color, useFpOffset, GCM_LOCATION_RSX);
+	}
 }
 
 // TODO: This is a placeholder, replace with good api, closer to vitaGL
