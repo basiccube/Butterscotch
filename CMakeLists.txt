@@ -477,6 +477,7 @@ elseif(PLATFORM STREQUAL "ps3")
     target_include_directories(butterscotch PRIVATE ${CMAKE_SOURCE_DIR}/src/debug_font)
     target_include_directories(butterscotch PRIVATE ${CMAKE_SOURCE_DIR}/vendor/ps3gl)
     target_include_directories(butterscotch PRIVATE ${CMAKE_SOURCE_DIR}/vendor/mojoal)
+    target_include_directories(butterscotch PRIVATE ${CMAKE_SOURCE_DIR}/src/ps3)
 
     # Butterscotch VM/interpreter profiler
     option(ENABLE_VM_GML_PROFILER "Enable Butterscotch VM/interpreter profiler" OFF)
