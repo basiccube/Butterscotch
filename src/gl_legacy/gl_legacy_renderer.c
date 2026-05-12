@@ -1154,13 +1154,36 @@ static int32_t glCreateSpriteFromSurface(Renderer* renderer, int32_t surfaceID, 
     uint8_t* pixels = safeMalloc((size_t) w * (size_t) h * 4);
     if (pixels == nullptr) return -1;
 
+#ifdef PLATFORM_PS3
+    if (0 > x || 0 > y || (uint32_t) (x + w) > display_width || (uint32_t) (y + h) > display_height) {
+        free(pixels);
+        return -1;
+    }
+    // Ensure that the draw calls were executed
+    waitFinish();
+    const uint8_t* src = (const uint8_t*) color_buffer[curr_fb];
+    size_t srcRowBytes = color_pitch;
+    size_t dstRowBytes = (size_t) w * 4;
+    repeat(h, row) {
+        const uint8_t* srcLine = src + ((size_t) (y + row)) * srcRowBytes + (size_t) (x * 4);
+        uint8_t* dstLine = pixels + (size_t) row * dstRowBytes;
+        repeat(w, px) {
+            // Swizzle from ARGB to RGBA
+            uint8_t a = srcLine[px * 4 + 0];
+            uint8_t r = srcLine[px * 4 + 1];
+            uint8_t g = srcLine[px * 4 + 2];
+            uint8_t b = srcLine[px * 4 + 3];
+            dstLine[px * 4 + 0] = r;
+            dstLine[px * 4 + 1] = g;
+            dstLine[px * 4 + 2] = b;
+            dstLine[px * 4 + 3] = a;
+        }
+    }
+    // We don't need to flip vertically because the PlayStation 3 framebuffer is already top-down
+#else
     // OpenGL Y is bottom-up, GML Y is top-down, so flip the Y coordinate
     int32_t glY = gl->gameH - y - h;
-#ifdef PLATFORM_PS3
-    memcpy(pixels, color_buffer[curr_fb ^ 1], display_height*color_pitch);
-#else
     glReadPixels(x, glY, w, h, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
-#endif
 
     // Flip vertically (OpenGL reads bottom-to-top)
     size_t rowBytes = (size_t) w * 4;
@@ -1173,6 +1196,7 @@ static int32_t glCreateSpriteFromSurface(Renderer* renderer, int32_t surfaceID, 
         memcpy(bot, rowTemp, rowBytes);
     }
     free(rowTemp);
+#endif
 
     // Create a new GL texture from the captured pixels
     GLuint newTexId;
