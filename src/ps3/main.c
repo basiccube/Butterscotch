@@ -25,6 +25,12 @@
 #include "utils.h"
 #include "profiler.h"
 
+// Paletted fragment shader.
+extern unsigned char paletted_fpo[];
+extern unsigned int  paletted_fpo_len;
+GLuint g_palettedProgram = 0;
+GLint  g_palettedUPaletteVLoc = -1;
+
 #include <io/pad.h>
 #include <sys/systime.h>
 #include <sys/thread.h>
@@ -248,6 +254,22 @@ int main(int argc, char* argv[]) {
 #endif
 
     PS3Overlay_init();
+
+    // Initialize the paletted shader
+    // The palette must ALWAYS be in TEXUNIT1!
+    {
+        GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);
+        glShaderBinary(1, &fs, PS3GL_SHADER_BINARY_FPO, paletted_fpo, (GLsizei) paletted_fpo_len);
+        g_palettedProgram = glCreateProgram();
+        glAttachShader(g_palettedProgram, fs);
+        glLinkProgram(g_palettedProgram);
+        g_palettedUPaletteVLoc = glGetUniformLocation(g_palettedProgram, "uPaletteV");
+        GLint uPaletteLoc = glGetUniformLocation(g_palettedProgram, "uPalette");
+        glUseProgram(g_palettedProgram);
+        glUniform1i(uPaletteLoc, 1);
+        glUseProgram(0);
+        printf("Paletted shader: program=%u uPaletteV=%d uPalette=%d\n", g_palettedProgram, g_palettedUPaletteVLoc, uPaletteLoc);
+    }
 
     // Initialize the runner
     Runner* runner = Runner_create(dataWin, vm, renderer, (FileSystem*) overlayFs, audioSystem);
