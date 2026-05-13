@@ -1696,7 +1696,7 @@ void glGetFloatv(GLenum pname, GLfloat *params)
 	}
 }
 
-void _setup_draw_env(void)
+void _setup_draw_env(void) {
     if(_opengl_state.bound_draw_framebuffer)
 	    rsxSetSurface(context,&_opengl_state.bound_draw_framebuffer->gcmSurface);
     else setRenderTarget(curr_fb);
