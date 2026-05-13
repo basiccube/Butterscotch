@@ -1040,9 +1040,9 @@ void glDeleteFramebuffers( GLsizei n, const GLuint *framebuffers)
 
 void glBindFramebuffer( GLenum target, GLuint framebuffer )
 {
-	if(target == GL_FRAMEBUFFER) _opengl_state.bound_framebuffer = (framebuffer == 0) ? &_opengl_state.framebuffers[framebuffer] : NULL;
-	if(target == GL_READ_FRAMEBUFFER) _opengl_state.bound_read_framebuffer = &_opengl_state.framebuffers[framebuffer];
-	if(target == GL_DRAW_FRAMEBUFFER) _opengl_state.bound_write_framebuffer = &_opengl_state.framebuffers[framebuffer];
+	if(target == GL_FRAMEBUFFER) _opengl_state.bound_read_framebuffer =_opengl_state.bound_draw_framebuffer = (framebuffer == 0) ? &_opengl_state.framebuffers[framebuffer] : NULL;
+	if(target == GL_READ_FRAMEBUFFER) _opengl_state.bound_read_framebuffer = (framebuffer == 0) ? &_opengl_state.framebuffers[framebuffer] : NULL;
+	if(target == GL_DRAW_FRAMEBUFFER) _opengl_state.bound_draw_framebuffer = (framebuffer == 0) ? &_opengl_state.framebuffers[framebuffer] : NULL;
 }
 
 GLAPI void APIENTRY glBlitFramebuffer (GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1, GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1, GLbitfield mask, GLenum filter)
@@ -1050,11 +1050,11 @@ GLAPI void APIENTRY glBlitFramebuffer (GLint srcX0, GLint srcY0, GLint srcX1, GL
 				rsxSetTransferImage(
 				context, // context
 				GCM_TRANSFER_LOCAL_TO_LOCAL, //mode
-				_opengl_state.bound_write_framebuffer == NULL ? 
-				_opengl_state.bound_write_framebuffer->gcmSurface.colorOffset[curr_fb] :
+				_opengl_state.bound_draw_framebuffer == NULL ? 
+				_opengl_state.bound_draw_framebuffer->gcmSurface.colorOffset[curr_fb] :
 				color_offset[curr_fb], // dstOffset
-				_opengl_state.bound_write_framebuffer == NULL ? 
-				_opengl_state.bound_write_framebuffer->gcmSurface.width*4 :
+				_opengl_state.bound_draw_framebuffer == NULL ? 
+				_opengl_state.bound_draw_framebuffer->gcmSurface.width*4 :
 				display_width*4, // dstPitch
 				dstX1-dstX0, // dstX
 				dstY1-dstY0, // dstY
@@ -1080,7 +1080,7 @@ GLenum glCheckFramebufferStatus (GLenum target) {
 // TODO: Assumes target = GL_FRAMEBUFFER, attachment = GL_COLOR_ATTACHMENT0, textarget = GL_TEXTURE_2D and level = 0;
 void glFramebufferTexture2D (GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level) {
 	struct ps3gl_texture tx = _opengl_state.textures[texture];
-	_opengl_state.bound_framebuffer->fbTexture = &_opengl_state.textures[texture];
+	_opengl_state.bound_draw_framebuffer->fbTexture = &_opengl_state.textures[texture];
 
 	// If framebuffer don't swap channels
 	tx.gcmTexture.remap  = (
@@ -1094,7 +1094,7 @@ void glFramebufferTexture2D (GLenum target, GLenum attachment, GLenum textarget,
 				   (GCM_TEXTURE_REMAP_COLOR_B << GCM_TEXTURE_REMAP_TYPE_B_SHIFT)
 	);
 
-	gcmSurface sf = _opengl_state.bound_framebuffer->gcmSurface;
+	gcmSurface sf = _opengl_state.bound_draw_framebuffer->gcmSurface;
 
 	sf.colorFormat		= GCM_SURFACE_A8R8G8B8;
 	sf.colorTarget		= GCM_SURFACE_TARGET_0;
@@ -1108,7 +1108,7 @@ void glFramebufferTexture2D (GLenum target, GLenum attachment, GLenum textarget,
 
 void glGetIntegerv( GLenum pname, GLint *params )
 {
-	if(pname == GL_FRAMEBUFFER_BINDING) *params = _opengl_state.bound_framebuffer->id;
+	if(pname == GL_FRAMEBUFFER_BINDING) *params = _opengl_state.bound_draw_framebuffer->id;
 	if(pname == GL_PACK_ALIGNMENT) *params = 1;
 }
 
@@ -1119,9 +1119,9 @@ void glReadPixels( GLint x, GLint y,
                                     GLenum format, GLenum type,
                                     GLvoid *pixels )
 {
-	void* data = (_opengl_state.bound_framebuffer == NULL) ? 
+	void* data = (_opengl_state.bound_read_framebuffer == NULL) ? 
 	(void*)color_buffer[curr_fb^1] : 
-	(void*)_opengl_state.bound_framebuffer->fbTexture->data;
+	(void*)_opengl_state.bound_read_framebuffer->fbTexture->data;
 
     // Ensure that the draw calls were executed
 	if(format == GL_RGBA && type == GL_UNSIGNED_BYTE) {
@@ -1690,7 +1690,7 @@ void glGetFloatv(GLenum pname, GLfloat *params)
 
 void _setup_draw_env(void)
 {
-	rsxSetSurface(context,&_opengl_state.bound_framebuffer->gcmSurface);
+	rsxSetSurface(context,&_opengl_state.bound_draw_framebuffer->gcmSurface);
 
 	rsxSetShadeModel(context, _opengl_state.shade_model);
 	rsxSetPointSize(context, _opengl_state.point_size);

@@ -213,9 +213,8 @@ struct ps3gl_opengl_state
 	struct ps3gl_texture textures[MAX_TEXTURES];
 	struct ps3gl_texture *bound_textures[MAX_TEX_UNITS];
 	struct ps3gl_framebuffer framebuffers[MAX_TEXTURES];
-	struct ps3gl_framebuffer *bound_framebuffer;
 	struct ps3gl_framebuffer *bound_read_framebuffer;
-	struct ps3gl_framebuffer *bound_write_framebuffer;
+	struct ps3gl_framebuffer *bound_draw_framebuffer;
 	GLboolean texture_unit_enabled[MAX_TEX_UNITS];
 	GLuint active_texture_unit;         // index into bound_textures[]
 	GLuint nextTextureID;
