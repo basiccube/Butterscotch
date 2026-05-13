@@ -1111,7 +1111,6 @@ void glFramebufferTexture2D (GLenum target, GLenum attachment, GLenum textarget,
 	sf.depthOffset		= depth_offset;
 	sf.depthPitch		= depth_pitch;
 	*/
-	_setup_draw_env();
 }
 
 void glGetIntegerv( GLenum pname, GLint *params )
