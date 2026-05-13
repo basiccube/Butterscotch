@@ -1915,6 +1915,7 @@ void ps3glInit(void)
 
 	// Textures
 	_opengl_state.nextTextureID = 1;
+	_opengl_state.nextFramebufferID = 1;
 	_opengl_state.active_texture_unit = 0;
 	for (int u = 0; MAX_TEX_UNITS > u; u++) {
 		_opengl_state.bound_textures[u] = &_opengl_state.textures[0];
