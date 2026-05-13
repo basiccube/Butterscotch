@@ -1103,6 +1103,12 @@ void glFramebufferTexture2D (GLenum target, GLenum attachment, GLenum textarget,
 	sf.colorPitch[0]	= tx.gcmTexture.width*4;
 	sf.width			= tx.gcmTexture.width;
 	sf.height			= tx.gcmTexture.height;
+
+	// This is wrong but i dont think i can skip a depth attachment
+	sf.depthFormat		= GCM_SURFACE_ZETA_Z24S8;
+	sf.depthLocation	= GCM_LOCATION_RSX;
+	sf.depthOffset		= depth_offset;
+	sf.depthPitch		= depth_pitch;
 	_setup_draw_env();
 }
 
