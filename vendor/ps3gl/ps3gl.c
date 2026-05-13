@@ -776,7 +776,7 @@ void glTexImage2D( GLenum target, GLint level,
 	if (activeBoundTex() == NULL)
 		return;
 
-	if(pixels == NULL) return;
+	//if(pixels == NULL) return;
 
 	struct ps3gl_texture *currentTexture = activeBoundTex();
 	currentTexture->gcmTexture.width = width;
@@ -1047,29 +1047,41 @@ void glBindFramebuffer( GLenum target, GLuint framebuffer )
 
 GLAPI void APIENTRY glBlitFramebuffer (GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1, GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1, GLbitfield mask, GLenum filter)
 {
-				rsxSetTransferImage(
-				context, // context
-				GCM_TRANSFER_LOCAL_TO_LOCAL, //mode
-				_opengl_state.bound_draw_framebuffer != NULL ? 
-				_opengl_state.bound_draw_framebuffer->gcmSurface.colorOffset[0] :
-				color_offset[curr_fb], // dstOffset
-				_opengl_state.bound_draw_framebuffer != NULL ? 
-				_opengl_state.bound_draw_framebuffer->gcmSurface.colorPitch[0] :
-				color_pitch, // dstPitch
-				dstX1-dstX0, // dstX
-				dstY1-dstY0, // dstY
-				_opengl_state.bound_read_framebuffer != NULL ? 
+  gcmTransferScale scale;
+  gcmTransferSurface surface;
+
+  scale.conversion = GCM_TRANSFER_CONVERSION_TRUNCATE;
+  scale.format = GCM_TRANSFER_SCALE_FORMAT_A8R8G8B8;
+  scale.origin = GCM_TRANSFER_ORIGIN_CORNER;
+  scale.operation = GCM_TRANSFER_OPERATION_SRCCOPY;
+  scale.interp = GCM_TRANSFER_INTERPOLATOR_NEAREST;
+  scale.clipX = 0;
+  scale.clipY = 0;
+  scale.clipW = display_width;
+  scale.clipH = display_height;
+  scale.outX = dstX0;
+  scale.outY = dstY0;
+  scale.outW = dstX1-dstX0;
+  scale.outH = dstY1-dstY0;
+  scale.ratioX = rsxGetFixedSint32(1.f);
+  scale.ratioY = rsxGetFixedSint32(1.f);
+  scale.inX = rsxGetFixedUint16(srcX0);
+  scale.inY = rsxGetFixedUint16(srcY0);
+  scale.inW = srcX1-srcX0;
+  scale.inH = srcY1-srcY0;
+  scale.offset = _opengl_state.bound_read_framebuffer != NULL ? 
 				_opengl_state.bound_read_framebuffer->gcmSurface.colorOffset[0] :
-				color_offset[curr_fb^1], // srcOffset
-				_opengl_state.bound_read_framebuffer != NULL ? 
+				color_offset[curr_fb^1];
+  scale.pitch = _opengl_state.bound_read_framebuffer != NULL ? 
 				_opengl_state.bound_read_framebuffer->gcmSurface.colorPitch[0] :
-				color_pitch, // dstPitch
-				srcX0, // srcX 
-				srcY0, //  srcY
-				srcX1-srcX0, // width
-				srcY1-srcY0, // height
-				4 // bpp
-			);
+				color_pitch;
+
+  surface.format = GCM_TRANSFER_SURFACE_FORMAT_A8R8G8B8;
+  surface.pitch = color_pitch;
+  surface.offset = color_offset[curr_fb];
+
+  rsxSetTransferScaleMode(context, GCM_TRANSFER_LOCAL_TO_LOCAL, GCM_TRANSFER_SURFACE);
+  rsxSetTransferScaleSurface(context, &scale, &surface);
 }
 
 GLenum glCheckFramebufferStatus (GLenum target) {
