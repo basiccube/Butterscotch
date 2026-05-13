@@ -1051,7 +1051,7 @@ GLAPI void APIENTRY glBlitFramebuffer (GLint srcX0, GLint srcY0, GLint srcX1, GL
 				context, // context
 				GCM_TRANSFER_LOCAL_TO_LOCAL, //mode
 				_opengl_state.bound_draw_framebuffer != NULL ? 
-				_opengl_state.bound_draw_framebuffer->gcmSurface.colorOffset[curr_fb] :
+				_opengl_state.bound_draw_framebuffer->gcmSurface.colorOffset[0] :
 				color_offset[curr_fb], // dstOffset
 				_opengl_state.bound_draw_framebuffer != NULL ? 
 				_opengl_state.bound_draw_framebuffer->gcmSurface.width*4 :
@@ -1059,7 +1059,7 @@ GLAPI void APIENTRY glBlitFramebuffer (GLint srcX0, GLint srcY0, GLint srcX1, GL
 				dstX1-dstX0, // dstX
 				dstY1-dstY0, // dstY
 				_opengl_state.bound_read_framebuffer != NULL ? 
-				_opengl_state.bound_read_framebuffer->gcmSurface.colorOffset[curr_fb^1] :
+				_opengl_state.bound_read_framebuffer->gcmSurface.colorOffset[0] :
 				color_offset[curr_fb^1], // srcOffset
 				_opengl_state.bound_read_framebuffer != NULL ? 
 				_opengl_state.bound_read_framebuffer->gcmSurface.width*4 :
