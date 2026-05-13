@@ -1040,9 +1040,9 @@ void glDeleteFramebuffers( GLsizei n, const GLuint *framebuffers)
 
 void glBindFramebuffer( GLenum target, GLuint framebuffer )
 {
-	if(target == GL_FRAMEBUFFER) _opengl_state.bound_read_framebuffer =_opengl_state.bound_draw_framebuffer = (framebuffer == 0) ? &_opengl_state.framebuffers[framebuffer] : NULL;
-	if(target == GL_READ_FRAMEBUFFER) _opengl_state.bound_read_framebuffer = (framebuffer == 0) ? &_opengl_state.framebuffers[framebuffer] : NULL;
-	if(target == GL_DRAW_FRAMEBUFFER) _opengl_state.bound_draw_framebuffer = (framebuffer == 0) ? &_opengl_state.framebuffers[framebuffer] : NULL;
+	if(target == GL_FRAMEBUFFER) _opengl_state.bound_read_framebuffer =_opengl_state.bound_draw_framebuffer = (framebuffer != 0) ? &_opengl_state.framebuffers[framebuffer] : NULL;
+	if(target == GL_READ_FRAMEBUFFER) _opengl_state.bound_read_framebuffer = (framebuffer != 0) ? &_opengl_state.framebuffers[framebuffer] : NULL;
+	if(target == GL_DRAW_FRAMEBUFFER) _opengl_state.bound_draw_framebuffer = (framebuffer != 0) ? &_opengl_state.framebuffers[framebuffer] : NULL;
 }
 
 GLAPI void APIENTRY glBlitFramebuffer (GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1, GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1, GLbitfield mask, GLenum filter)
