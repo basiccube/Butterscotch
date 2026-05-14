@@ -352,16 +352,18 @@ void glFrustum( GLdouble left, GLdouble right,
 
 void glViewport( GLint x, GLint y, GLsizei width, GLsizei height )
 {
+	// Y is flipped relative to the currently bound draw target. When an FBO is bound, the target's height is the FBO's surface height, not the screen.
+	GLint targetHeight = (_opengl_state.bound_draw_framebuffer != NULL) ? (GLint) _opengl_state.bound_draw_framebuffer->gcmSurface.height : (GLint) display_height;
 
 	_opengl_state.viewport.x = x;
-	_opengl_state.viewport.y = display_height - y - height;
+	_opengl_state.viewport.y = targetHeight - y - height;
 	_opengl_state.viewport.w = width;
 	_opengl_state.viewport.h = height;
 
 	if(_opengl_state.scissor.h == 0)
 	{
 		_opengl_state.scissor.x = x;
-		_opengl_state.scissor.y = y; // TODO: Check if this has to be display_height - y - height;
+		_opengl_state.scissor.y = y; // TODO: Check if this has to be targetHeight - y - height;
 		_opengl_state.scissor.w = width;
 		_opengl_state.scissor.h = height;
 	}
