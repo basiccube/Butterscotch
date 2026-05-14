@@ -1077,8 +1077,12 @@ GLAPI void APIENTRY glBlitFramebuffer (GLint srcX0, GLint srcY0, GLint srcX1, GL
 				color_pitch;
 
   surface.format = GCM_TRANSFER_SURFACE_FORMAT_A8R8G8B8;
-  surface.pitch = color_pitch;
-  surface.offset = color_offset[curr_fb];
+  surface.pitch = _opengl_state.bound_draw_framebuffer != NULL ? 
+				_opengl_state.bound_draw_framebuffer->gcmSurface.colorPitch[0] :
+				color_pitch;
+  surface.offset = _opengl_state.bound_draq_framebuffer != NULL ? 
+				_opengl_state.bound_draw_framebuffer->gcmSurface.colorPitch[0] :
+				color_pitch;
 
   rsxSetTransferScaleMode(context, GCM_TRANSFER_LOCAL_TO_LOCAL, GCM_TRANSFER_SURFACE);
   rsxSetTransferScaleSurface(context, &scale, &surface);
