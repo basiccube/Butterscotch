@@ -1110,15 +1110,15 @@ void glFramebufferTexture2D (GLenum target, GLenum attachment, GLenum textarget,
 				   (GCM_TEXTURE_REMAP_COLOR_B << GCM_TEXTURE_REMAP_TYPE_B_SHIFT)
 	);
 
-	gcmSurface sf = _opengl_state.bound_draw_framebuffer->gcmSurface;
+	gcmSurface* sf = &_opengl_state.bound_draw_framebuffer->gcmSurface;
 
-	sf.colorFormat		= GCM_SURFACE_A8R8G8B8;
-	sf.colorTarget		= GCM_SURFACE_TARGET_0;
-	sf.colorLocation[0]	= GCM_LOCATION_RSX;
-	sf.colorOffset[0]	= tx->gcmTexture.offset;
-	sf.colorPitch[0]	= tx->gcmTexture.width*sizeof(uint32_t);
-	sf.width			= tx->gcmTexture.width;
-	sf.height			= tx->gcmTexture.height;
+	sf->colorFormat		= GCM_SURFACE_A8R8G8B8;
+	sf->colorTarget		= GCM_SURFACE_TARGET_0;
+	sf->colorLocation[0]	= GCM_LOCATION_RSX;
+	sf->colorOffset[0]	= tx->gcmTexture.offset;
+	sf->colorPitch[0]	= tx->gcmTexture.width*sizeof(uint32_t);
+	sf->width			= tx->gcmTexture.width;
+	sf->height			= tx->gcmTexture.height;
 
 	// This is wrong but i dont think i can skip a depth attachment
 	/*
