@@ -1134,7 +1134,7 @@ void glFramebufferTexture2D (GLenum target, GLenum attachment, GLenum textarget,
 
 void glGetIntegerv( GLenum pname, GLint *params )
 {
-	if(pname == GL_FRAMEBUFFER_BINDING) *params = _opengl_state.bound_draw_framebuffer->id;
+	if(pname == GL_FRAMEBUFFER_BINDING) *params = _opengl_state.bound_draw_framebuffer ? _opengl_state.bound_draw_framebuffer->id : 0;
 	if(pname == GL_PACK_ALIGNMENT) *params = 1;
 }
 
@@ -1151,6 +1151,7 @@ void glReadPixels( GLint x, GLint y,
 
     // Ensure that the draw calls were executed
 	if(format == GL_RGBA && type == GL_UNSIGNED_BYTE) {
+		rsxFinish(context, 1);
 		waitFinish();
 		const uint8_t* src = (const uint8_t*) data;
 		size_t srcRowBytes = width*4;
