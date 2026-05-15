@@ -617,9 +617,61 @@ static void glDrawRectangle(Renderer* renderer, float x1, float y1, float x2, fl
     }
 }
 
-static void glDrawRectangleColor(Renderer* renderer, float x1, float y1, float x2, float y2, uint32_t color1, MAYBE_UNUSED uint32_t color2, MAYBE_UNUSED uint32_t color3, MAYBE_UNUSED uint32_t color4, float alpha, bool outline) {
-    // Stub! Please implement me later. :3
-    glDrawRectangle(renderer, x1, y1, x2, y2, color1, alpha, outline);
+static void glDrawLineColor(Renderer* renderer, float x1, float y1, float x2, float y2, float width, uint32_t color1, uint32_t color2, float alpha);
+static void glDrawRectangleColor(Renderer* renderer, float x1, float y1, float x2, float y2, uint32_t color1, uint32_t color2, uint32_t color3, uint32_t color4, float alpha, bool outline) {
+    GLLegacyRenderer* gl = (GLLegacyRenderer*) renderer;
+
+    float r1 = (float) BGR_R(color1) / 255.0f;
+    float g1 = (float) BGR_G(color1) / 255.0f;
+    float b1 = (float) BGR_B(color1) / 255.0f;
+
+    float r2 = (float) BGR_R(color2) / 255.0f;
+    float g2 = (float) BGR_G(color2) / 255.0f;
+    float b2 = (float) BGR_B(color2) / 255.0f;
+
+    float r3 = (float) BGR_R(color3) / 255.0f;
+    float g3 = (float) BGR_G(color3) / 255.0f;
+    float b3 = (float) BGR_B(color3) / 255.0f;
+
+    float r4 = (float) BGR_R(color4) / 255.0f;
+    float g4 = (float) BGR_G(color4) / 255.0f;
+    float b4 = (float) BGR_B(color4) / 255.0f;
+
+    glBindTexture(GL_TEXTURE_2D, gl->whiteTexture);
+
+    if (outline) {
+        // Draw 4 one-pixel-wide edges: top, bottom, left, right
+        glDrawLineColor(renderer, x1, y1, x2, y1, 1.0, color1, color2, alpha);
+        glDrawLineColor(renderer, x2, y1, x2, y2, 1.0, color2, color3, alpha);
+        glDrawLineColor(renderer, x2, y2, x1, y2, 1.0, color3, color4, alpha);
+        glDrawLineColor(renderer, x1, y2, x1, y1, 1.0, color4, color1, alpha);
+    } else {
+        // Filled rectangle: GML adds +1 to width/height for filled rects
+
+        // All UVs point to (0.5, 0.5) center of the 1x1 white texture
+        glBegin(GL_QUADS);
+            // Vertex 0: top-left
+            glColor4f(r1, g1, b1, alpha);
+            glTexCoord2f(0.5f, 0.5f);
+            glVertex2f(x1, y1); 
+
+            // Vertex 1: top-right
+            glColor4f(r2, g2, b2, alpha);
+            glTexCoord2f(0.5f, 0.5f);
+            glVertex2f(x2+1, y1);
+
+            // Vertex 2: bottom-right
+            glColor4f(r3, g3, b3, alpha);
+            glTexCoord2f(0.5f, 0.5f);
+            glVertex2f(x2+1, y2+1);
+
+            // Vertex 3: bottom-left
+            glColor4f(r4, g4, b4, alpha);
+            glTexCoord2f(0.5f, 0.5f);
+            glVertex2f(x1, y2+1); 
+
+        glEnd();
+    }
 }
 
 // ===[ Line Drawing ]===
