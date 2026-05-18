@@ -133,7 +133,7 @@ void* loop() {
         Runner_drawPre(gRunner, 640, 480);
         Runner_computeViewDisplayScale(gRunner, gameW, gameH, &displayScaleX, &displayScaleY);
 
-        gRunner->renderer->vtable->beginFrame(gRunner->renderer, gameW, gameH, 640, 480);
+        Runner_beginFrame(gRunner, gameW, gameH, 640, 480);
 
         // Clear FBO with room background color
         if (gRunner->drawBackgroundColor) {

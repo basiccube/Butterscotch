@@ -1153,7 +1153,7 @@ int main(int argc, char* argv[]) {
 
         Runner_computeViewDisplayScale(runner, reqW, reqH, &displayScaleX, &displayScaleY);
 
-        renderer->vtable->beginFrame(renderer, reqW, reqH, fbWidth, fbHeight);
+        Runner_beginFrame(runner, reqW, reqH, fbWidth, fbHeight);
 
         // Clear FBO with room background color
         if (runner->drawBackgroundColor) {

@@ -1653,6 +1653,7 @@ static void validateRendererVtable(Renderer* renderer) {
     requireNotNullFunction(createSurface);
     requireNotNullFunction(surfaceExists);
     requireNotNullFunction(setRenderTarget);
+    requireNotNullFunction(ensureApplicationSurface);
     requireNotNullFunction(getSurfaceWidth);
     requireNotNullFunction(getSurfaceHeight);
     requireNotNullFunction(drawSurface);
@@ -1688,6 +1689,8 @@ Runner* Runner_create(DataWin* dataWin, VMContext* vm, Renderer* renderer, FileS
     runner->applicationHeight = (int32_t) dataWin->gen8.defaultWindowHeight;
     runner->oldApplicationWidth = runner->applicationWidth;
     runner->oldApplicationHeight = runner->applicationHeight;
+    runner->applicationSurfaceId = APPLICATION_SURFACE_ID;
+    renderer->runner = runner;
 
     repeat(MAX_SURFACES, i) {
         runner->surfaceStack[i] = -1;
@@ -2783,15 +2786,21 @@ bool Runner_surfaceResetTarget(Runner* runner) {
     runner->renderer->vtable->flush(runner->renderer);
 
     int32_t newTop = findStackTop(runner);
-    int32_t newTarget = newTop == -1 ? APPLICATION_SURFACE_ID : runner->surfaceStack[newTop];
+    int32_t newTarget = newTop == -1 ? runner->applicationSurfaceId : runner->surfaceStack[newTop];
     runner->renderer->vtable->setRenderTarget(runner->renderer, newTarget);
     return true;
 }
 
 int32_t Runner_surfaceGetTarget(Runner* runner) {
     int32_t top = findStackTop(runner);
-    if (top == -1) return -1;
+    if (top == -1) return runner->applicationSurfaceId;
     return runner->surfaceStack[top];
+}
+
+void Runner_beginFrame(Runner* runner, int32_t gameW, int32_t gameH, int32_t windowW, int32_t windowH) {
+    Renderer* renderer = runner->renderer;
+    runner->applicationSurfaceId = renderer->vtable->ensureApplicationSurface(renderer, gameW, gameH);
+    renderer->vtable->beginFrame(renderer, gameW, gameH, windowW, windowH);
 }
 
 // ===[ State Dump ]===

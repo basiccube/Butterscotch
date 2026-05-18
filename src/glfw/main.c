@@ -590,7 +590,7 @@ static void dumpAllSurfaces(GLRenderer* gl, const char* filenamePattern, int fra
         writeFramebufferAsPng(gl->surfaces[surfaceId], width, height, filename, "Surface dump", false);
     }
 
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, gl->fbo);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
 }
 
 // ===[ KEYBOARD INPUT ]===
@@ -747,7 +747,7 @@ static bool getGlfwWindowSize(void* window, int32_t* outW, int32_t* outH) {
     glfwGetWindowSize(&w, &h);
 #else
     if (window == nullptr) return false;
-    glfwGetWindowSize((GLFWwindow*) window, &w, &h);
+    glfwGetFramebufferSize((GLFWwindow*) window, &w, &h);
 #endif
     if (w <= 0 || h <= 0) return false;
     *outW = w;
@@ -762,7 +762,13 @@ static void setGlfwWindowSize(void* window, int32_t width, int32_t height) {
     glfwSetWindowSize(width, height);
 #else
     if (window == nullptr) return;
-    glfwSetWindowSize((GLFWwindow*) window, width, height);
+    // window_set_size's GML argument is in pixels (the framebuffer dimension the game wants), but glfwSetWindowSize takes LOGICAL screen-coordinate units.
+    // Convert via the current content scale so the resulting framebuffer matches what the GML asked for.
+    float xs = 1.0f, ys = 1.0f;
+    glfwGetWindowContentScale((GLFWwindow*) window, &xs, &ys);
+    int logicalW = (xs > 0.0f) ? (int) ((float) width  / xs + 0.5f) : width;
+    int logicalH = (ys > 0.0f) ? (int) ((float) height / ys + 0.5f) : height;
+    glfwSetWindowSize((GLFWwindow*) window, logicalW, logicalH);
 #endif
 }
 
@@ -1383,8 +1389,6 @@ int main(int argc, char* argv[]) {
 
         int32_t gameW = runner->applicationWidth;
         int32_t gameH = runner->applicationHeight;
-        renderer->appSurfaceAutoDraw = runner->appSurfaceAutoDraw;
-        renderer->usingAppSurface = runner->usingAppSurface;
 
         // The application surface (FBO) is sized to defaultWindowWidth x defaultWindowHeight.
         // It is a bit hard to understand, but here's how it works:
@@ -1398,7 +1402,7 @@ int main(int argc, char* argv[]) {
         Runner_drawPre(runner, fbWidth, fbHeight);
         Runner_computeViewDisplayScale(runner, gameW, gameH, &displayScaleX, &displayScaleY);
 
-        renderer->vtable->beginFrame(renderer, gameW, gameH, fbWidth, fbHeight);
+        Runner_beginFrame(runner, gameW, gameH, fbWidth, fbHeight);
 
         // Clear FBO with room background color
         if (runner->drawBackgroundColor) {
@@ -1422,14 +1426,15 @@ int main(int argc, char* argv[]) {
         bool shouldScreenshot = hmget(args.screenshotFrames, runner->frameCount);
 
         if (shouldScreenshot) {
+            int32_t appId = runner->applicationSurfaceId;
             GLuint readFbo;
 #ifdef ENABLE_LEGACY_GL
             if (strcmp(args.renderer, "legacy-gl") == 0) {
-                readFbo = ((GLLegacyRenderer*) renderer)->fbo;
+                readFbo = ((GLLegacyRenderer*) renderer)->surfaces[appId];
             } else
 #endif
             {
-                readFbo = ((GLRenderer*) renderer)->fbo;
+                readFbo = ((GLRenderer*) renderer)->surfaces[appId];
             }
             captureScreenshot(readFbo, args.screenshotPattern, runner->frameCount, gameW, gameH);
             glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);

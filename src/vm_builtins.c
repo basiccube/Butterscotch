@@ -813,7 +813,9 @@ RValue VMBuiltins_getVariable(VMContext* ctx, int16_t builtinVarId, const char* 
 
         // Surfaces
         case BUILTIN_VAR_APPLICATION_SURFACE:
-            return RValue_makeReal(-1.0); // sentinel ID for the application surface
+            // Real surface ID on GL/GL-legacy (allocated lazily by Runner_beginFrame's ensureApplicationSurface call);
+            // APPLICATION_SURFACE_ID (-1) on PS2 where the screen FB lives outside the chunk pool.
+            return RValue_makeReal((GMLReal) runner->applicationSurfaceId);
 
         // Constants that GMS defines
         case BUILTIN_VAR_TRUE:
@@ -6705,12 +6707,17 @@ static RValue builtin_surface_get_target(VMContext* ctx, MAYBE_UNUSED RValue* ar
 
 static RValue builtin_surface_resize(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
     int32_t surfaceId = (int32_t) RValue_toReal(args[0]);
-    float w = (float) RValue_toReal(args[1]);
-    float h = (float) RValue_toReal(args[2]);
+    int32_t w = (int32_t) RValue_toReal(args[1]);
+    int32_t h = (int32_t) RValue_toReal(args[2]);
     Runner* runner = ctx->runner;
-    if (runner->renderer != nullptr) {
-        runner->renderer->vtable->surfaceResize(runner->renderer, surfaceId, w, h);
+    if (runner->renderer == nullptr) return RValue_makeUndefined();
+
+    // For the application_surface, the runner is the source of truth for the requested dimensions.
+    if (surfaceId == runner->applicationSurfaceId) {
+        if (w > 0) runner->applicationWidth = w;
+        if (h > 0) runner->applicationHeight = h;
     }
+    runner->renderer->vtable->surfaceResize(runner->renderer, surfaceId, w, h);
     return RValue_makeUndefined();
 }
 
@@ -6846,35 +6853,24 @@ static RValue builtin_draw_surface_stretched(VMContext* ctx, RValue* args, MAYBE
     return RValue_makeUndefined();
 }
 
-// application_surface is surface ID -1 (sentinel); for it, return the window dimensions
 static RValue builtin_surface_get_width(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
     int32_t surfaceId = (int32_t) RValue_toReal(args[0]);
     Runner* runner = ctx->runner;
-    if (surfaceId == -1) {
-        if (runner != nullptr && runner->applicationWidth > 0) {
-            return RValue_makeReal((GMLReal) runner->applicationWidth);
-        }
+    if (runner != nullptr && surfaceId == runner->applicationSurfaceId) {
+        if (runner->applicationWidth > 0) return RValue_makeReal((GMLReal) runner->applicationWidth);
         return RValue_makeReal((GMLReal) ctx->dataWin->gen8.defaultWindowWidth);
-    } else {
-        return RValue_makeReal(Renderer_getSurfaceWidth(runner->renderer, surfaceId));
     }
-
-    return RValue_makeReal(0.0);
+    return RValue_makeReal(Renderer_getSurfaceWidth(runner->renderer, surfaceId));
 }
 
 static RValue builtin_surface_get_height(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
     int32_t surfaceId = (int32_t) RValue_toReal(args[0]);
     Runner* runner = ctx->runner;
-    if (surfaceId == -1) {
-        if (runner != nullptr && runner->applicationHeight > 0) {
-            return RValue_makeReal((GMLReal) runner->applicationHeight);
-        }
+    if (runner != nullptr && surfaceId == runner->applicationSurfaceId) {
+        if (runner->applicationHeight > 0) return RValue_makeReal((GMLReal) runner->applicationHeight);
         return RValue_makeReal((GMLReal) ctx->dataWin->gen8.defaultWindowHeight);
-    } else {
-        return RValue_makeReal(Renderer_getSurfaceHeight(runner->renderer, surfaceId));
     }
-
-    return RValue_makeReal(0.0);
+    return RValue_makeReal(Renderer_getSurfaceHeight(runner->renderer, surfaceId));
 }
 
 // Sprite functions

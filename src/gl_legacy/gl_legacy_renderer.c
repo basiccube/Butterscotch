@@ -106,12 +106,7 @@ static void glInit(Renderer* renderer, DataWin* dataWin) {
     gl->originalTpagCount = dataWin->tpag.count;
     gl->originalSpriteCount = dataWin->sprt.count;
 
-    // Create FBO
-    glGenFramebuffers(1, &gl->fbo);
-    gl->fboTexture = 0;
-    gl->fboWidth = 0;
-    gl->fboHeight = 0;
-
+    // application_surface is allocated lazily by glLegacyEnsureApplicationSurface as a normal entry in the surface table.
     gl->surfaces = nullptr;
     gl->surfaceTexture = nullptr;
     gl->surfaceWidth = nullptr;
@@ -128,8 +123,6 @@ static void glDestroy(Renderer* renderer) {
 
     glDeleteTextures((GLsizei) gl->textureCount, gl->glTextures);
 
-    if (gl->fboTexture != 0) glDeleteTextures(1, &gl->fboTexture);
-    if (gl->fbo != 0) glDeleteFramebuffers(1, &gl->fbo);
     for (uint32_t i = 0; gl->surfaceCount > i; i++) {
         if (gl->surfaceTexture[i] != 0) glDeleteTextures(1, &gl->surfaceTexture[i]);
         if (gl->surfaces[i] != 0) glDeleteFramebuffers(1, &gl->surfaces[i]);
@@ -153,11 +146,9 @@ static void glBeginFrame(Renderer* renderer, int32_t gameW, int32_t gameH, int32
     gl->gameW = gameW;
     gl->gameH = gameH;
 
-    if (gameW != gl->fboWidth || gameH != gl->fboHeight) {
-        GLCommon_resizeMainFBO(&gl->fboTexture, gl->fbo, &gl->fboWidth, &gl->fboHeight, gameW, gameH);
-    }
-
-    glBindFramebuffer(GL_FRAMEBUFFER, gl->fbo);
+    // Bind the application_surface (sized/created by Runner_beginFrame's ensureApplicationSurface call right before this).
+    int32_t appId = gl->base.runner->applicationSurfaceId;
+    glBindFramebuffer(GL_FRAMEBUFFER, gl->surfaces[appId]);
     glViewport(0, 0, gameW, gameH);
     gl->base.CPortX = 0;
     gl->base.CPortY = 0;
@@ -241,20 +232,22 @@ static void glEndGUI(MAYBE_UNUSED Renderer* renderer) {
 }
 
 static void glEndFrameInit(Renderer* renderer) {
-    MAYBE_UNUSED GLLegacyRenderer* gl = (GLLegacyRenderer*) renderer;
-    if (renderer->usingAppSurface && !renderer->appSurfaceAutoDraw) {
+    GLLegacyRenderer* gl = (GLLegacyRenderer*) renderer;
+    if (renderer->runner->usingAppSurface && !renderer->runner->appSurfaceAutoDraw) {
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         return;
     }
-    GLCommon_beginLetterboxBlit(gl->fbo);
+    int32_t appId = gl->base.runner->applicationSurfaceId;
+    GLCommon_beginLetterboxBlit(gl->surfaces[appId]);
 }
 
 static void glEndFrameEnd(Renderer* renderer) {
-    MAYBE_UNUSED GLLegacyRenderer* gl = (GLLegacyRenderer*) renderer;
-    if (renderer->usingAppSurface && !renderer->appSurfaceAutoDraw) {
+    GLLegacyRenderer* gl = (GLLegacyRenderer*) renderer;
+    if (renderer->runner->usingAppSurface && !renderer->runner->appSurfaceAutoDraw) {
         return;
     }
-    GLCommon_endLetterboxBlit(gl->fboWidth, gl->fboHeight, gl->gameW, gl->gameH, gl->windowW, gl->windowH);
+    int32_t appId = gl->base.runner->applicationSurfaceId;
+    GLCommon_endLetterboxBlit(gl->surfaceWidth[appId], gl->surfaceHeight[appId], gl->gameW, gl->gameH, gl->windowW, gl->windowH);
 }
 
 static void glRendererFlush(MAYBE_UNUSED Renderer* renderer) {}
@@ -1226,19 +1219,11 @@ static int32_t glCreateSpriteFromSurface(Renderer* renderer, int32_t surfaceID, 
     DataWin* dw = renderer->dataWin;
 
     if (0 >= w || 0 >= h) return -1;
+    if (0 > surfaceID || (uint32_t) surfaceID >= gl->surfaceCount) return -1;
+    if (gl->surfaces[surfaceID] == 0) return -1;
 
-    // Bind the source FBO and figure out its height for the GL bottom-up flip.
-    // application_surface (-1) reads from the main FBO; otherwise read from the matching surface FBO.
-    int32_t srcHeight;
-    if (surfaceID == APPLICATION_SURFACE_ID) {
-        glBindFramebuffer(GL_READ_FRAMEBUFFER, gl->fbo);
-        srcHeight = gl->fboHeight;
-    } else {
-        if (0 > surfaceID || (uint32_t) surfaceID >= gl->surfaceCount) return -1;
-        if (gl->surfaces[surfaceID] == 0) return -1;
-        glBindFramebuffer(GL_READ_FRAMEBUFFER, gl->surfaces[surfaceID]);
-        srcHeight = gl->surfaceHeight[surfaceID];
-    }
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, gl->surfaces[surfaceID]);
+    int32_t srcHeight = gl->surfaceHeight[surfaceID];
 
     uint8_t* pixels = safeMalloc((size_t) w * (size_t) h * 4);
     if (pixels == nullptr)
@@ -1397,6 +1382,11 @@ static void glGpuGetColorWriteEnable(Renderer* renderer, bool* red, bool* green,
 
 static int32_t glLegacyCreateSurface(Renderer* renderer, int32_t width, int32_t height) {
     GLLegacyRenderer* gl = (GLLegacyRenderer*) renderer;
+
+    // Save the current FBO binding so creating a surface doesn't change the active render target.
+    GLint prevBinding = 0;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevBinding);
+
     uint32_t surfaceIndex = GLCommon_findOrAllocateSurfaceSlot(&gl->surfaces, &gl->surfaceTexture, &gl->surfaceWidth, &gl->surfaceHeight, &gl->surfaceCount);
 
     glGenFramebuffers(1, &gl->surfaces[surfaceIndex]);
@@ -1416,14 +1406,30 @@ static int32_t glLegacyCreateSurface(Renderer* renderer, int32_t width, int32_t 
         fprintf(stderr, "GL: Surface FBO incomplete (status=0x%X)\n", status);
     }
 
-    // Rebind whatever was the current render target before this call.
-    glBindFramebuffer(GL_FRAMEBUFFER, gl->fbo);
-
     gl->surfaceWidth[surfaceIndex] = width;
     gl->surfaceHeight[surfaceIndex] = height;
 
     fprintf(stderr, "GL: Created surface %u with size (%dx%d)\n", surfaceIndex, width, height);
+    glBindFramebuffer(GL_FRAMEBUFFER, (GLuint) prevBinding);
     return (int32_t) surfaceIndex;
+}
+
+static int32_t glLegacyEnsureApplicationSurface(Renderer* renderer, int32_t width, int32_t height) {
+    GLLegacyRenderer* gl = (GLLegacyRenderer*) renderer;
+    int32_t id = renderer->runner->applicationSurfaceId;
+
+    bool needsCreate = (id < 0) || ((uint32_t) id >= gl->surfaceCount) || (gl->surfaces[id] == 0);
+    if (needsCreate) {
+        id = glLegacyCreateSurface(renderer, width, height);
+        // Publish immediately so anything that re-queries the runner during this frame sees the new ID.
+        renderer->runner->applicationSurfaceId = id;
+        return id;
+    }
+
+    if (gl->surfaceWidth[id] != width || gl->surfaceHeight[id] != height) {
+        renderer->vtable->surfaceResize(renderer, id, width, height);
+    }
+    return id;
 }
 
 static bool glLegacySurfaceExists(Renderer* renderer, int32_t surfaceId) {
@@ -1452,6 +1458,9 @@ static void glLegacySurfaceResize(Renderer* renderer, int32_t surfaceId, int32_t
     if (gl->surfaces[surfaceId] == 0) return;
     if (gl->surfaceWidth[surfaceId] == width && gl->surfaceHeight[surfaceId] == height) return;
 
+    GLint prevBinding = 0;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevBinding);
+
     if (gl->surfaceTexture[surfaceId] != 0) glDeleteTextures(1, &gl->surfaceTexture[surfaceId]);
 
     glGenTextures(1, &gl->surfaceTexture[surfaceId]);
@@ -1464,7 +1473,7 @@ static void glLegacySurfaceResize(Renderer* renderer, int32_t surfaceId, int32_t
 
     glBindFramebuffer(GL_FRAMEBUFFER, gl->surfaces[surfaceId]);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, gl->surfaceTexture[surfaceId], 0);
-    glBindFramebuffer(GL_FRAMEBUFFER, gl->fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, (GLuint) prevBinding);
 
     gl->surfaceWidth[surfaceId] = width;
     gl->surfaceHeight[surfaceId] = height;
@@ -1474,6 +1483,8 @@ static void glLegacySurfaceResize(Renderer* renderer, int32_t surfaceId, int32_t
 static void glLegacySurfaceFree(Renderer* renderer, int32_t surfaceId) {
     GLLegacyRenderer* gl = (GLLegacyRenderer*) renderer;
     if (0 > surfaceId || (uint32_t) surfaceId >= gl->surfaceCount) return;
+    // Freeing the application_surface is a no-op from GML; the runner manages its lifecycle via application_surface_enable.
+    if (surfaceId == renderer->runner->applicationSurfaceId) return;
     if (gl->surfaceTexture[surfaceId] != 0) glDeleteTextures(1, &gl->surfaceTexture[surfaceId]);
     if (gl->surfaces[surfaceId] != 0) glDeleteFramebuffers(1, &gl->surfaces[surfaceId]);
     gl->surfaces[surfaceId] = 0;
@@ -1483,12 +1494,15 @@ static void glLegacySurfaceFree(Renderer* renderer, int32_t surfaceId) {
     fprintf(stderr, "GL: Freed Surface %d\n", surfaceId);
 }
 
-// Binds the given surface (or APPLICATION_SURFACE_ID for the main FBO) and sets a matching ortho projection.
 static bool glLegacySetRenderTarget(Renderer* renderer, int32_t surfaceId) {
     GLLegacyRenderer* gl = (GLLegacyRenderer*) renderer;
 
-    if (surfaceId == APPLICATION_SURFACE_ID) {
-        glBindFramebuffer(GL_FRAMEBUFFER, gl->fbo);
+    if (0 > surfaceId || (uint32_t) surfaceId >= gl->surfaceCount) return false;
+    if (gl->surfaces[surfaceId] == 0) return false;
+
+    glBindFramebuffer(GL_FRAMEBUFFER, gl->surfaces[surfaceId]);
+
+    if (surfaceId == renderer->runner->applicationSurfaceId) {
         glViewport(gl->base.CPortX, gl->base.CPortY, gl->base.CPortW, gl->base.CPortH);
         glMatrixMode(GL_PROJECTION);
         glLoadMatrixf(renderer->PreviousViewMatrix.m);
@@ -1498,13 +1512,9 @@ static bool glLegacySetRenderTarget(Renderer* renderer, int32_t surfaceId) {
         return true;
     }
 
-    if (0 > surfaceId || (uint32_t) surfaceId >= gl->surfaceCount) return false;
-    if (gl->surfaces[surfaceId] == 0) return false;
-
     int32_t w = gl->surfaceWidth[surfaceId];
     int32_t h = gl->surfaceHeight[surfaceId];
 
-    glBindFramebuffer(GL_FRAMEBUFFER, gl->surfaces[surfaceId]);
     glViewport(0, 0, w, h);
     glDisable(GL_SCISSOR_TEST);
 
@@ -1518,14 +1528,8 @@ static bool glLegacySetRenderTarget(Renderer* renderer, int32_t surfaceId) {
     return true;
 }
 
-// Resolves a surfaceID (or APPLICATION_SURFACE_ID for the main FBO) to a GL texture and its size.
+// Resolves a surfaceID to a GL texture and its size.
 static bool resolveSurfaceTexture(GLLegacyRenderer* gl, int32_t surfaceId, GLuint* outTexId, int32_t* outW, int32_t* outH) {
-    if (surfaceId == APPLICATION_SURFACE_ID) {
-        *outTexId = gl->fboTexture;
-        *outW = gl->fboWidth;
-        *outH = gl->fboHeight;
-        return *outTexId != 0;
-    }
     if (0 > surfaceId || (uint32_t) surfaceId >= gl->surfaceCount) return false;
     if (gl->surfaces[surfaceId] == 0) return false;
     *outTexId = gl->surfaceTexture[surfaceId];
@@ -1580,7 +1584,7 @@ static void glLegacyDrawSurface(Renderer* renderer, int32_t surfaceId, int32_t s
 
 static void glLegacySurfaceCopy(Renderer* renderer, int32_t destSurfaceID, int32_t destX, int32_t destY, int32_t srcSurfaceID, int32_t srcX, int32_t srcY, int32_t srcW, int32_t srcH, bool part) {
     GLLegacyRenderer* gl = (GLLegacyRenderer*) renderer;
-    GLCommon_surfaceBlit(gl->fbo, gl->fboWidth, gl->fboHeight, gl->surfaces, gl->surfaceWidth, gl->surfaceHeight, gl->surfaceCount, destSurfaceID, destX, destY, srcSurfaceID, srcX, srcY, srcW, srcH, part);
+    GLCommon_surfaceBlit(gl->surfaces, gl->surfaceWidth, gl->surfaceHeight, gl->surfaceCount, destSurfaceID, destX, destY, srcSurfaceID, srcX, srcY, srcW, srcH, part);
 }
 
 static bool glLegacySurfaceGetPixels(Renderer* renderer, int32_t surfaceId, uint8_t* outRGBA) {
@@ -1628,6 +1632,7 @@ static RendererVtable glVtable = {
     .createSurface = glLegacyCreateSurface,
     .surfaceExists = glLegacySurfaceExists,
     .setRenderTarget = glLegacySetRenderTarget,
+    .ensureApplicationSurface = glLegacyEnsureApplicationSurface,
     .getSurfaceWidth = glLegacyGetSurfaceWidth,
     .getSurfaceHeight = glLegacyGetSurfaceHeight,
     .drawSurface = glLegacyDrawSurface,
@@ -1653,7 +1658,5 @@ Renderer* GLLegacyRenderer_create(void) {
     gl->colorWriteB = true;
     gl->colorWriteA = true;
 
-    gl->base.appSurfaceAutoDraw = true;
-    gl->base.usingAppSurface = true;
     return (Renderer*) gl;
 }

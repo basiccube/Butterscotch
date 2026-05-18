@@ -2606,7 +2606,15 @@ static int32_t gsCreateSurface(Renderer* renderer, int32_t width, int32_t height
 
 static bool gsSurfaceExists(Renderer* renderer, int32_t surfaceID) {
     GsRenderer* gs = (GsRenderer*) renderer;
+    // The application_surface (sentinel ID on PS2) is always live: it's the GS screen framebuffer at a fixed VRAM address.
+    if (surfaceID == APPLICATION_SURFACE_ID) return true;
     return gsSurfaceIsLive(gs, surfaceID);
+}
+
+// PS2's application surface IS the GS screen framebuffer, which lives at a fixed VRAM address outside the chunk pool.
+// There's nothing to allocate, so we just return the sentinel ID.
+static int32_t gsEnsureApplicationSurface(MAYBE_UNUSED Renderer* renderer, MAYBE_UNUSED int32_t width, MAYBE_UNUSED int32_t height) {
+    return APPLICATION_SURFACE_ID;
 }
 
 static bool gsSetRenderTarget(Renderer* renderer, int32_t surfaceID) {
@@ -2701,24 +2709,45 @@ static bool gsSetRenderTarget(Renderer* renderer, int32_t surfaceID) {
 
 static float gsGetSurfaceWidth(Renderer* renderer, int32_t surfaceID) {
     GsRenderer* gs = (GsRenderer*) renderer;
+    if (surfaceID == APPLICATION_SURFACE_ID) return (float) gs->gsGlobal->Width;
     if (!gsSurfaceIsLive(gs, surfaceID)) return 0.0f;
     return (float) gs->surfaces[surfaceID].width;
 }
 
 static float gsGetSurfaceHeight(Renderer* renderer, int32_t surfaceID) {
     GsRenderer* gs = (GsRenderer*) renderer;
+    if (surfaceID == APPLICATION_SURFACE_ID) return (float) gs->gsGlobal->Height;
     if (!gsSurfaceIsLive(gs, surfaceID)) return 0.0f;
     return (float) gs->surfaces[surfaceID].height;
 }
 
 static void gsDrawSurface(Renderer* renderer, int32_t surfaceID, int32_t srcLeft, int32_t srcTop, int32_t srcWidth, int32_t srcHeight, float x, float y, float xscale, float yscale, float angleDeg, uint32_t color, float alpha) {
     GsRenderer* gs = (GsRenderer*) renderer;
-    if (!gsSurfaceIsLive(gs, surfaceID)) return;
 
-    Surface* s = &gs->surfaces[surfaceID];
-    if (s->chunkCount == 0) return; // phantom surface — fully transparent, nothing to draw
+    int32_t surfaceW;
+    int32_t surfaceH;
+    uint32_t srcVram;
+    uint32_t srcTbw;
 
-    if (0 > srcWidth) { srcLeft = 0; srcTop = 0; srcWidth = s->width; srcHeight = s->height; }
+    if (surfaceID == APPLICATION_SURFACE_ID) {
+        // Sample the live GS screen framebuffer; flush pending draws first so the texture read sees a coherent FB.
+        gsKit_queue_exec(gs->gsGlobal);
+        dmaKit_wait_fast();
+        surfaceW = (int32_t) gs->gsGlobal->Width;
+        surfaceH = (int32_t) gs->gsGlobal->Height;
+        srcVram = gs->gsGlobal->ScreenBuffer[gs->gsGlobal->ActiveBuffer & 1];
+        srcTbw = (uint32_t) gs->gsGlobal->Width / 64;
+    } else {
+        if (!gsSurfaceIsLive(gs, surfaceID)) return;
+        Surface* s = &gs->surfaces[surfaceID];
+        if (s->chunkCount == 0) return; // phantom surface — fully transparent, nothing to draw
+        surfaceW = s->width;
+        surfaceH = s->height;
+        srcVram = gs->textureVramBase + (uint32_t) s->firstChunk * VRAM_CHUNK_SIZE;
+        srcTbw = s->tbw;
+    }
+
+    if (0 > srcWidth) { srcLeft = 0; srcTop = 0; srcWidth = surfaceW; srcHeight = surfaceH; }
 
     float worldW = (float) srcWidth * xscale;
     float worldH = (float) srcHeight * yscale;
@@ -2743,10 +2772,10 @@ static void gsDrawSurface(Renderer* renderer, int32_t surfaceID, int32_t srcLeft
 
     GSTEXTURE tex;
     memset(&tex, 0, sizeof(tex));
-    tex.Width = s->width;
-    tex.Height = s->height;
-    tex.TBW = s->tbw;
-    tex.Vram = gs->textureVramBase + (uint32_t) s->firstChunk * VRAM_CHUNK_SIZE;
+    tex.Width = surfaceW;
+    tex.Height = surfaceH;
+    tex.TBW = srcTbw;
+    tex.Vram = srcVram;
     tex.PSM = GS_PSM_CT16;
     tex.Filter = GS_FILTER_NEAREST;
 
@@ -2773,7 +2802,9 @@ static void gsDrawSurface(Renderer* renderer, int32_t surfaceID, int32_t srcLeft
     // Restore default REPEAT so subsequent atlas draws aren't stuck on this region.
     gsKit_set_clamp(gs->gsGlobal, GS_CMODE_REPEAT);
 }
-static void gsSurfaceResize(MAYBE_UNUSED Renderer* renderer, MAYBE_UNUSED int32_t surfaceID, MAYBE_UNUSED int32_t width, MAYBE_UNUSED int32_t height) {}
+static void gsSurfaceResize(MAYBE_UNUSED Renderer* renderer, int32_t surfaceID, int32_t width, int32_t height) {
+    // No-op: PS2 doesn't actually resize anything
+}
 
 static void gsSurfaceFree(Renderer* renderer, int32_t surfaceID) {
     GsRenderer* gs = (GsRenderer*) renderer;
@@ -2903,6 +2934,7 @@ static RendererVtable gsVtable = {
     .createSurface = gsCreateSurface,
     .surfaceExists = gsSurfaceExists,
     .setRenderTarget = gsSetRenderTarget,
+    .ensureApplicationSurface = gsEnsureApplicationSurface,
     .getSurfaceWidth = gsGetSurfaceWidth,
     .getSurfaceHeight = gsGetSurfaceHeight,
     .drawSurface = gsDrawSurface,
