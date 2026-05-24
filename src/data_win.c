@@ -219,13 +219,13 @@ PathPositionResult GamePath_getPosition(GamePath* path, float t) {
 static void parseGEN8(BinaryReader* reader, DataWin* dw) {
     Gen8* g = &dw->gen8;
     g->isDebuggerDisabled = BinaryReader_readUint8(reader);
-    g->bytecodeVersion = BinaryReader_readUint8(reader);
+    g->wadVersion = BinaryReader_readUint8(reader);
     BinaryReader_skip(reader, 2); // padding
 
     // BC8 GEN8 is 84 bytes total with a radically different field layout:
     // * No config/name/displayName string ptrs.
     // * No major/minor/release/build, but a roomOrder list is appended at the tail.
-    if (8 >= g->bytecodeVersion) {
+    if (8 >= g->wadVersion) {
         g->fileName = readStringPtr(reader, dw);
         g->config = nullptr;
         g->lastObj = BinaryReader_readUint32(reader);
@@ -278,7 +278,7 @@ static void parseGEN8(BinaryReader* reader, DataWin* dw) {
     g->info = BinaryReader_readUint32(reader);
     g->licenseCRC32 = BinaryReader_readUint32(reader);
     BinaryReader_readBytes(reader, g->licenseMD5, 16);
-    if (10 >= g->bytecodeVersion) {
+    if (10 >= g->wadVersion) {
         int32_t ts = BinaryReader_readInt32(reader); // int32 timestamp (FILETIME-derived)
         g->timestamp = (uint64_t) (int64_t) ts;
         BinaryReader_skip(reader, 4); // unread padding at body+0x60
@@ -305,7 +305,7 @@ static void parseGEN8(BinaryReader* reader, DataWin* dw) {
     g->activeTargets = BinaryReader_readUint64(reader);
     g->functionClassifications = BinaryReader_readUint64(reader);
     g->steamAppID = BinaryReader_readInt32(reader);
-    if (g->bytecodeVersion >= 14) {
+    if (g->wadVersion >= 14) {
         g->debuggerPort = BinaryReader_readUint32(reader);
     }
 
@@ -397,7 +397,7 @@ static void parseOPTN(BinaryReader* reader, DataWin* dw) {
     }
 
     // Constants SimpleList (absent on BC8)
-    if (8 >= dw->gen8.bytecodeVersion) {
+    if (8 >= dw->gen8.wadVersion) {
         o->constantCount = 0;
         o->constants = nullptr;
         return;
@@ -523,7 +523,7 @@ static void parseEXTN(BinaryReader* reader, DataWin* dw) {
     }
     free(extPtrs);
 
-    // Product ID data (16 bytes per extension, bytecodeVersion >= 14)
+    // Product ID data (16 bytes per extension, wadVersion >= 14)
     // Skipped -- we seek to chunkEnd after parsing
 }
 
@@ -548,7 +548,7 @@ static void parseSOND(BinaryReader* reader, DataWin* dw) {
         snd->file = readStringPtr(reader, dw);
         snd->effects = BinaryReader_readUint32(reader);
         snd->volume = BinaryReader_readFloat32(reader);
-        if (10 >= dw->gen8.bytecodeVersion) {
+        if (10 >= dw->gen8.wadVersion) {
             snd->pan = BinaryReader_readFloat32(reader);
 
             bool embedded = BinaryReader_readBool32(reader);
@@ -564,8 +564,8 @@ static void parseSOND(BinaryReader* reader, DataWin* dw) {
         snd->pitch = BinaryReader_readFloat32(reader);
 
         // AudioGroup or preload field at offset +28
-        // For GMS 1.4.x (bytecodeVersion >= 14) with Regular flag: resource_id
-        if ((snd->flags & AUDIO_ENTRY_FLAG_REGULAR) == AUDIO_ENTRY_FLAG_REGULAR && dw->gen8.bytecodeVersion >= 14) {
+        // For GMS 1.4.x (wadVersion >= 14) with Regular flag: resource_id
+        if ((snd->flags & AUDIO_ENTRY_FLAG_REGULAR) == AUDIO_ENTRY_FLAG_REGULAR && dw->gen8.wadVersion >= 14) {
             snd->audioGroup = BinaryReader_readInt32(reader);
         } else {
             int32_t preload = BinaryReader_readInt32(reader);
@@ -783,7 +783,7 @@ static void parsePATH(BinaryReader* reader, DataWin* dw) {
         path->internalPointCount = 0;
         path->length = 0.0;
         path->name = readStringPtr(reader, dw);
-        if (10 >= dw->gen8.bytecodeVersion) {
+        if (10 >= dw->gen8.wadVersion) {
             // BC10: closed at +4, smooth at +8 (swapped vs later versions)
             path->isClosed = BinaryReader_readBool32(reader);
             path->isSmooth = BinaryReader_readBool32(reader);
@@ -969,8 +969,8 @@ static void parseSHDR(BinaryReader* reader, DataWin* dw) {
             sh->vertexAttributes = nullptr;
         }
 
-        // Version field and console shader variants only exist on bytecodeVersion > 13.
-        if (dw->gen8.bytecodeVersion > 13) {
+        // Version field and console shader variants only exist on wadVersion > 13.
+        if (dw->gen8.wadVersion > 13) {
             sh->version = BinaryReader_readInt32(reader);
 
             sh->pssl_VertexOffset = BinaryReader_readUint32(reader);
@@ -1024,7 +1024,7 @@ static void parseFONT(BinaryReader* reader, DataWin* dw) {
     if (count == 0) { free(ptrs); f->fonts = nullptr; return; }
 
     // We need to figure out how many uint32 fields are between here and the PointerList
-    uint32_t fontOptionalCount = (dw->gen8.bytecodeVersion >= 17) ? 1u : 0u;
+    uint32_t fontOptionalCount = (dw->gen8.wadVersion >= 17) ? 1u : 0u;
     {
         size_t baseAfterScaleY = (size_t) ptrs[0] + 40;
         for (uint32_t trial = fontOptionalCount; 4 >= trial; trial++) {
@@ -1070,7 +1070,7 @@ static void parseFONT(BinaryReader* reader, DataWin* dw) {
         font->hasSDFSpread = false;
         font->hasLineHeight = false;
         uint32_t readSoFar = 0;
-        if (dw->gen8.bytecodeVersion >= 17 && fontOptionalCount > readSoFar) {
+        if (dw->gen8.wadVersion >= 17 && fontOptionalCount > readSoFar) {
             font->ascenderOffset = BinaryReader_readInt32(reader);
             readSoFar++;
         }
@@ -1248,7 +1248,7 @@ static void parseOBJT(BinaryReader* reader, DataWin* dw) {
         obj->angularDamping = BinaryReader_readFloat32(reader);
         obj->physicsVertexCount = BinaryReader_readInt32(reader);
         // BC8 object records end at physicsVertexCount (no friction/awake/kinematic before the events list)
-        if (8 >= dw->gen8.bytecodeVersion) {
+        if (8 >= dw->gen8.wadVersion) {
             obj->friction = 0;
             obj->awake = false;
             obj->kinematic = false;
@@ -1392,7 +1392,7 @@ static void readRoomGameObjects(BinaryReader* reader, DataWin* dw, Room* room) {
             }
             go->color = BinaryReader_readUint32(reader);
             go->rotation = BinaryReader_readFloat32(reader);
-            if (dw->gen8.bytecodeVersion >= 16) {
+            if (dw->gen8.wadVersion >= 16) {
                 go->preCreateCode = BinaryReader_readInt32(reader);
             } else {
                 go->preCreateCode = -1;
@@ -1920,7 +1920,7 @@ static void parseCODE(BinaryReader* reader, DataWin* dw, uint32_t chunkLength, s
 
     if (codeCount == 0) { free(codePtrs); c->entries = nullptr; return; }
 
-    bool oldFormat = 14 >= dw->gen8.bytecodeVersion;
+    bool oldFormat = 14 >= dw->gen8.wadVersion;
 
     c->entries = safeCalloc(codeCount, sizeof(CodeEntry));
     repeat(codeCount, i) {
@@ -1984,7 +1984,7 @@ static void parseVARI(BinaryReader* reader, DataWin* dw, uint32_t chunkLength) {
 
     // BC<=14 has no header (varCount1/varCount2/maxLocalVarCount) and 12-byte entries (no instanceType/varID).
     // BC>=15 has a 12-byte header and 20-byte entries.
-    bool oldFormat = dw->gen8.bytecodeVersion <= 14;
+    bool oldFormat = dw->gen8.wadVersion <= 14;
 
     if (oldFormat) {
         v->varCount1 = 0;
@@ -2022,7 +2022,7 @@ static void parseFUNC(BinaryReader* reader, DataWin* dw, uint32_t chunkLength) {
     Func* f = &dw->func;
 
     // BC<=14 packs functions as a flat 12-byte-per-entry array (no SimpleList count prefix) and has no CodeLocals section.
-    if (dw->gen8.bytecodeVersion <= 14) {
+    if (dw->gen8.wadVersion <= 14) {
         f->functionCount = chunkLength / 12;
         if (f->functionCount > 0) {
             f->functions = safeMalloc(f->functionCount * sizeof(Function));
@@ -2393,7 +2393,7 @@ DataWin* DataWin_parse(const char* filePath, DataWinParserOptions options) {
         } else if (memcmp(chunkName, "EMBI", 4) == 0) {
             // Embedded Images chunk
         } else if (memcmp(chunkName, "TGIN", 4) == 0) {
-            // Texture Group Info chunk (bytecodeVersion >= 17)
+            // Texture Group Info chunk (wadVersion >= 17)
         } else if (memcmp(chunkName, "ACRV", 4) == 0) {
             // Animation Curves chunk (GMS 2.3+)
             DataWin_bumpVersionTo(dw, 2, 3, 0, 0);
