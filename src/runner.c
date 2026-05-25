@@ -1305,6 +1305,9 @@ static void initRoom(Runner* runner, int32_t roomIndex) {
         inst->imageAngle = (float) roomObj->rotation;
         inst->imageSpeed = roomObj->imageSpeed;
         inst->imageIndex = (float) roomObj->imageIndex;
+        // Room editor stores per-instance color as ABGR (0xAABBGGRR): low 24 bits feed image_blend, top 8 bits feed image_alpha.
+        inst->imageBlend = roomObj->color & 0x00FFFFFF;
+        inst->imageAlpha = (float) ((roomObj->color >> 24) & 0xFF) / 255.0f;
     }
 
     // In GMS2, instances get their depth from their room layer, not the object definition.
