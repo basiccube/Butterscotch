@@ -211,6 +211,28 @@ static void printOsTypeNames(FILE* out) {
     }
 }
 
+// Extracts the Runner arguments from a string, returning the values on stb_ds array
+// The "Runner arguments" is used for the "--game-args" and for the game_change GML function
+// Returns the modified array
+static char** extractRunnerArguments(char* rawArguments) {
+    // The "saveptr" is used for strtok_r to store its state
+    // So it is thread safe™
+    char *saveptr;
+    // We create a copy because strtok_r completely obliterates the original char buffer
+    char* copy = safeStrdup(rawArguments);
+    char* token = strtok_r(copy, " \t\r\n", &saveptr);
+    char** array = nullptr;
+
+    while (token != nullptr) {
+        arrput(array, safeStrdup(token));
+        token = strtok_r(nullptr, " \t\r\n", &saveptr);
+    }
+
+    free(copy);
+
+    return array;
+}
+
 static void parseCommandLineArgs(CommandLineArgs* args, int argc, char* argv[]) {
     memset(args, 0, sizeof(CommandLineArgs));
 
@@ -476,12 +498,11 @@ static void parseCommandLineArgs(CommandLineArgs* args, int argc, char* argv[]) 
                 args->saveFolder = optarg;
                 break;
             case 'N': {
-                char* dup = safeStrdup(optarg);
-                char* save = nullptr;
-                for (char* tok = strtok_r(dup, " \t\r\n", &save); tok != nullptr; tok = strtok_r(nullptr, " \t\r\n", &save)) {
-                    arrput(args->gameArgs, safeStrdup(tok));
+                repeat(arrlen(args->gameArgs), i) {
+                    free(args->gameArgs[i]);
                 }
-                free(dup);
+                arrfree(args->gameArgs);
+                args->gameArgs = extractRunnerArguments(optarg);
                 break;
             }
 #ifdef ENABLE_VM_OPCODE_PROFILER
@@ -517,8 +538,6 @@ static void parseCommandLineArgs(CommandLineArgs* args, int argc, char* argv[]) 
     }
 
     args->dataWinPath = argv[optind];
-
-    arrins(args->gameArgs, 0, safeStrdup(argv[0]));
 
     if (hmlen(args->screenshotFrames) > 0 && args->screenshotPattern == nullptr) {
         fprintf(stderr, "Error: --screenshot-at-frame requires --screenshot to be set\n");
@@ -850,798 +869,911 @@ int main(int argc, char* argv[]) {
     CommandLineArgs args;
     parseCommandLineArgs(&args, argc, argv);
 
-    printf("Loading %s...\n", args.dataWinPath);
+    char* currentDataWinPath = safeStrdup(args.dataWinPath);
+    char** currentGameArgs = args.gameArgs;
+    repeat(arrlen(args.gameArgs), i) {
+        arrput(currentGameArgs, args.gameArgs[i]);
+    }
+    // The first argument will ALWAYS be the argv[0]
+    arrins(currentGameArgs, 0, safeStrdup(argv[0]));
 
-    DataWin* dataWin = DataWin_parse(
-        args.dataWinPath,
-        (DataWinParserOptions) {
-            .parseGen8 = true,
-            .parseOptn = true,
-            .parseLang = true,
-            .parseExtn = false,
-            .parseSond = true,
-            .parseAgrp = true,
-            .parseSprt = true,
-            .parseBgnd = true,
-            .parsePath = true,
-            .parseScpt = true,
-            .parseGlob = true,
-            .parseShdr = true,
-            .parseFont = true,
-            .parseTmln = true,
-            .parseObjt = true,
-            .parseRoom = true,
-            .parseTpag = true,
-            .parseCode = true,
-            .parseVari = true,
-            .parseFunc = true,
-            .parseStrg = true,
-            .parseTxtr = true,
-            .parseAudo = true,
-            .skipLoadingPreciseMasksForNonPreciseSprites = true,
-            .lazyLoadRooms = args.lazyRooms,
-            .eagerlyLoadedRooms = args.eagerRooms
+    while (true) {
+        printf("Loading %s...\n", args.dataWinPath);
+
+        DataWin* dataWin = DataWin_parse(
+            currentDataWinPath,
+            (DataWinParserOptions) {
+                .parseGen8 = true,
+                .parseOptn = true,
+                .parseLang = true,
+                .parseExtn = false,
+                .parseSond = true,
+                .parseAgrp = true,
+                .parseSprt = true,
+                .parseBgnd = true,
+                .parsePath = true,
+                .parseScpt = true,
+                .parseGlob = true,
+                .parseShdr = true,
+                .parseFont = true,
+                .parseTmln = true,
+                .parseObjt = true,
+                .parseRoom = true,
+                .parseTpag = true,
+                .parseCode = true,
+                .parseVari = true,
+                .parseFunc = true,
+                .parseStrg = true,
+                .parseTxtr = true,
+                .parseAudo = true,
+                .skipLoadingPreciseMasksForNonPreciseSprites = true,
+                .lazyLoadRooms = args.lazyRooms,
+                .eagerlyLoadedRooms = args.eagerRooms
+            }
+        );
+
+        Gen8* gen8 = &dataWin->gen8;
+        printf("Loaded \"%s\" (%d) successfully! [WAD Version %u / GameMaker version %u.%u.%u.%u]\n", gen8->name, gen8->gameID, gen8->wadVersion, dataWin->detectedFormat.major, dataWin->detectedFormat.minor, dataWin->detectedFormat.release, dataWin->detectedFormat.build);
+
+#ifdef HAVE_MALLINFO2
+        {
+            struct mallinfo2 mi = mallinfo2();
+            printf("Memory after data.win parsing: used=%zu bytes (%.1f KB)\n", mi.uordblks, mi.uordblks / 1024.0f);
         }
-    );
-
-    Gen8* gen8 = &dataWin->gen8;
-    printf("Loaded \"%s\" (%d) successfully! [WAD Version %u / GameMaker version %u.%u.%u.%u]\n", gen8->name, gen8->gameID, gen8->wadVersion, dataWin->detectedFormat.major, dataWin->detectedFormat.minor, dataWin->detectedFormat.release, dataWin->detectedFormat.build);
-
-    #ifdef HAVE_MALLINFO2
-    {
-        struct mallinfo2 mi = mallinfo2();
-        printf("Memory after data.win parsing: used=%zu bytes (%.1f KB)\n", mi.uordblks, mi.uordblks / 1024.0f);
-    }
-    #endif
-
-    // Build window title
-    char windowTitle[256];
-    snprintf(windowTitle, sizeof(windowTitle), "Butterscotch - %s", gen8->displayName);
-
-    // Initialize VM
-    VMContext* vm = VM_create(dataWin);
-
-    Profiler_setEnabled(&vm->profiler, args.profilerFramesBetween > 0);
-#ifdef ENABLE_VM_OPCODE_PROFILER
-    vm->opcodeProfilerEnabled = args.opcodeProfiler;
-    if (vm->opcodeProfilerEnabled) {
-        vm->opcodeVariantCounts = safeCalloc(256 * 256, sizeof(uint64_t));
-        vm->opcodeRValueTypeCounts = safeCalloc(256 * 256, sizeof(uint64_t));
-    }
 #endif
 
-    if (args.hasSeed) {
-        srand((unsigned int) args.seed);
-        vm->hasFixedSeed = true;
-        printf("Using fixed RNG seed: %d\n", args.seed);
-    }
+        // Build window title
+        char windowTitle[256];
+        snprintf(windowTitle, sizeof(windowTitle), "Butterscotch - %s", gen8->displayName);
 
-    if (args.printRooms) {
-        // Under --lazy-rooms we load each room for display and then free it again so the dump
-        // reflects what each room contains without keeping all of them resident simultaneously.
-        forEachIndexed(Room, room, idx, dataWin->room.rooms, dataWin->room.count) {
-            if (!room->present) {
-                printf("[%d] <absent>\n", idx);
-                continue;
-            }
-            bool loadedHere = false;
-            if (!room->payloadLoaded) {
-                DataWin_loadRoomPayload(dataWin, (int32_t) idx);
-                loadedHere = true;
-            }
+        // Initialize VM
+        VMContext* vm = VM_create(dataWin);
 
-            printf("[%d] %s ()\n", idx, room->name);
+        Profiler_setEnabled(&vm->profiler, args.profilerFramesBetween > 0);
+#ifdef ENABLE_VM_OPCODE_PROFILER
+        vm->opcodeProfilerEnabled = args.opcodeProfiler;
+        if (vm->opcodeProfilerEnabled) {
+            vm->opcodeVariantCounts = safeCalloc(256 * 256, sizeof(uint64_t));
+            vm->opcodeRValueTypeCounts = safeCalloc(256 * 256, sizeof(uint64_t));
+        }
+#endif
 
-            forEachIndexed(RoomGameObject, roomGameObject, idx2, room->gameObjects, room->gameObjectCount) {
-                if (roomGameObject->objectDefinition < 0 || (uint32_t) roomGameObject->objectDefinition >= dataWin->objt.count) {
-                    printf("  [%d] <no object> (x=%d,y=%d)\n", idx2, roomGameObject->x, roomGameObject->y);
+        if (args.hasSeed) {
+            srand((unsigned int) args.seed);
+            vm->hasFixedSeed = true;
+            printf("Using fixed RNG seed: %d\n", args.seed);
+        }
+
+        if (args.printRooms) {
+            // Under --lazy-rooms we load each room for display and then free it again so the dump
+            // reflects what each room contains without keeping all of them resident simultaneously.
+            forEachIndexed(Room, room, idx, dataWin->room.rooms, dataWin->room.count) {
+                if (!room->present) {
+                    printf("[%d] <absent>\n", idx);
                     continue;
                 }
-                GameObject* gameObject = &dataWin->objt.objects[roomGameObject->objectDefinition];
-                printf(
-                    "  [%d] %s (x=%d,y=%d,persistent=%d,solid=%d,spriteId=%d,preCreateCode=%d,creationCode=%d)\n",
-                    idx2,
-                    gameObject->name,
-                    roomGameObject->x,
-                    roomGameObject->y,
-                    gameObject->persistent,
-                    gameObject->solid,
-                    gameObject->spriteId,
-                    roomGameObject->preCreateCode,
-                    roomGameObject->creationCode
-                );
-            }
+                bool loadedHere = false;
+                if (!room->payloadLoaded) {
+                    DataWin_loadRoomPayload(dataWin, (int32_t) idx);
+                    loadedHere = true;
+                }
 
-            if (loadedHere && !room->eagerlyLoaded) {
-                DataWin_freeRoomPayload(room);
-            }
-        }
-        VM_free(vm);
-        DataWin_free(dataWin);
-        return 0;
-    }
+                printf("[%d] %s ()\n", idx, room->name);
 
-    if (args.printObjects) {
-        forEachIndexed(GameObject, obj, idx, dataWin->objt.objects, dataWin->objt.count) {
-            uint32_t totalEvents = 0;
-            repeat(OBJT_EVENT_TYPE_COUNT, e) {
-                totalEvents += obj->eventLists[e].eventCount;
-            }
-            printf("[%u] %s:\n", idx, obj->name);
-            if (obj->parentId >= 0 && (uint32_t) obj->parentId < dataWin->objt.count) {
-                printf("  Parent: %s (%d)\n", dataWin->objt.objects[obj->parentId].name, obj->parentId);
-            } else {
-                printf("  Parent: none\n");
-            }
-            if (obj->spriteId >= 0 && (uint32_t) obj->spriteId < dataWin->sprt.count) {
-                printf("  Sprite: %s (%d)\n", dataWin->sprt.sprites[obj->spriteId].name, obj->spriteId);
-            } else {
-                printf("  Sprite: none\n");
-            }
-            printf("  Solid: %d\n", obj->solid);
-            printf("  Persistent: %d\n", obj->persistent);
-            printf("  Visible: %d\n", obj->visible);
-            printf("  Depth: %d\n", obj->depth);
-            printf("  Events (%u):\n", totalEvents);
-            repeat(OBJT_EVENT_TYPE_COUNT, e) {
-                ObjectEventList* list = &obj->eventLists[e];
-                repeat(list->eventCount, eIdx) {
-                    ObjectEvent* event = &list->events[eIdx];
-                    const char* eventName = Runner_getEventName((int32_t) e, (int32_t) event->eventSubtype);
-                    int32_t codeId = -1;
-                    if (event->actionCount > 0) codeId = event->actions[0].codeId;
-                    printf("    %s:\n", eventName);
-                    printf("      Sub Type: %u\n", event->eventSubtype);
-                    printf("      Code ID: %d\n", codeId);
-                    printf("      Actions: %u\n", event->actionCount);
+                forEachIndexed(RoomGameObject, roomGameObject, idx2, room->gameObjects, room->gameObjectCount) {
+                    if (roomGameObject->objectDefinition < 0 || (uint32_t) roomGameObject->objectDefinition >= dataWin->objt.count) {
+                        printf("  [%d] <no object> (x=%d,y=%d)\n", idx2, roomGameObject->x, roomGameObject->y);
+                        continue;
+                    }
+                    GameObject* gameObject = &dataWin->objt.objects[roomGameObject->objectDefinition];
+                    printf(
+                        "  [%d] %s (x=%d,y=%d,persistent=%d,solid=%d,spriteId=%d,preCreateCode=%d,creationCode=%d)\n",
+                        idx2,
+                        gameObject->name,
+                        roomGameObject->x,
+                        roomGameObject->y,
+                        gameObject->persistent,
+                        gameObject->solid,
+                        gameObject->spriteId,
+                        roomGameObject->preCreateCode,
+                        roomGameObject->creationCode
+                    );
+                }
+
+                if (loadedHere && !room->eagerlyLoaded) {
+                    DataWin_freeRoomPayload(room);
                 }
             }
-        }
-        VM_free(vm);
-        DataWin_free(dataWin);
-        return 0;
-    }
-
-    if (args.printDeclaredFunctions) {
-        repeat(hmlen(vm->codeIndexByName), i) {
-            printf("[%d] %s\n", vm->codeIndexByName[i].value, vm->codeIndexByName[i].key);
-        }
-        VM_free(vm);
-        DataWin_free(dataWin);
-        return 0;
-    }
-
-    if (args.printUnknownFunctions) {
-        uint32_t unimplementedCount = 0;
-        fprintf(stderr, "Unknown Functions:\n");
-        repeat(dataWin->func.functionCount, i) {
-            const char* name = dataWin->func.functions[i].name;
-            if (name == nullptr)
-                continue;
-
-            // Implemented as a user script/code entry?
-            if (shgeti(vm->codeIndexByName, (char*) name) >= 0)
-                continue;
-
-            // Implemented as a registered builtin?
-            if (VM_findBuiltin(vm, name) != nullptr)
-                continue;
-
-            fprintf(stderr, "- %s\n", name);
-            unimplementedCount++;
+            VM_free(vm);
+            DataWin_free(dataWin);
+            return 0;
         }
 
-        if (unimplementedCount == 0) {
-            fprintf(stderr, "All %u referenced functions are implemented! :3\n", dataWin->func.functionCount);
-        } else {
-            fprintf(stderr, "%u unknown function(s) out of %u referenced\n", unimplementedCount, dataWin->func.functionCount);
-        }
-        VM_free(vm);
-        DataWin_free(dataWin);
-        return 0;
-    }
-
-    if (shlen(args.disassemble) > 0) {
-        VM_buildCrossReferences(vm);
-        if (shgeti(args.disassemble, "*") >= 0) {
-            repeat(dataWin->code.count, i) {
-                VM_disassemble(vm, (int32_t) i);
-            }
-        } else {
-            for (ptrdiff_t i = 0; shlen(args.disassemble) > i; i++) {
-                const char* name = args.disassemble[i].key;
-                ptrdiff_t idx = shgeti(vm->codeIndexByName, (char*) name);
-                if (idx >= 0) {
-                    VM_disassemble(vm, vm->codeIndexByName[idx].value);
+        if (args.printObjects) {
+            forEachIndexed(GameObject, obj, idx, dataWin->objt.objects, dataWin->objt.count) {
+                uint32_t totalEvents = 0;
+                repeat(OBJT_EVENT_TYPE_COUNT, e) {
+                    totalEvents += obj->eventLists[e].eventCount;
+                }
+                printf("[%u] %s:\n", idx, obj->name);
+                if (obj->parentId >= 0 && (uint32_t) obj->parentId < dataWin->objt.count) {
+                    printf("  Parent: %s (%d)\n", dataWin->objt.objects[obj->parentId].name, obj->parentId);
                 } else {
-                    fprintf(stderr, "Error: Script '%s' not found in funcMap\n", name);
+                    printf("  Parent: none\n");
+                }
+                if (obj->spriteId >= 0 && (uint32_t) obj->spriteId < dataWin->sprt.count) {
+                    printf("  Sprite: %s (%d)\n", dataWin->sprt.sprites[obj->spriteId].name, obj->spriteId);
+                } else {
+                    printf("  Sprite: none\n");
+                }
+                printf("  Solid: %d\n", obj->solid);
+                printf("  Persistent: %d\n", obj->persistent);
+                printf("  Visible: %d\n", obj->visible);
+                printf("  Depth: %d\n", obj->depth);
+                printf("  Events (%u):\n", totalEvents);
+                repeat(OBJT_EVENT_TYPE_COUNT, e) {
+                    ObjectEventList* list = &obj->eventLists[e];
+                    repeat(list->eventCount, eIdx) {
+                        ObjectEvent* event = &list->events[eIdx];
+                        const char* eventName = Runner_getEventName((int32_t) e, (int32_t) event->eventSubtype);
+                        int32_t codeId = -1;
+                        if (event->actionCount > 0) codeId = event->actions[0].codeId;
+                        printf("    %s:\n", eventName);
+                        printf("      Sub Type: %u\n", event->eventSubtype);
+                        printf("      Code ID: %d\n", codeId);
+                        printf("      Actions: %u\n", event->actionCount);
+                    }
                 }
             }
+            VM_free(vm);
+            DataWin_free(dataWin);
+            return 0;
         }
-        VM_free(vm);
-        DataWin_free(dataWin);
-        freeCommandLineArgs(&args);
-        return 0;
-    }
 
-    // Initialize the file system
-    char* dataWinDir = nullptr;
-    {
-        const char* lastSlash = strrchr(args.dataWinPath, '/');
-        const char* lastBackslash = strrchr(args.dataWinPath, '\\');
-        if (lastBackslash != nullptr && (lastSlash == nullptr || lastBackslash > lastSlash))
-            lastSlash = lastBackslash;
-        if (lastSlash != nullptr) {
-            size_t len = (size_t) (lastSlash - args.dataWinPath + 1);
-            dataWinDir = safeMalloc(len + 1);
-            memcpy(dataWinDir, args.dataWinPath, len);
-            dataWinDir[len] = '\0';
-        } else {
-            dataWinDir = safeStrdup("./");
+        if (args.printDeclaredFunctions) {
+            repeat(hmlen(vm->codeIndexByName), i) {
+                printf("[%d] %s\n", vm->codeIndexByName[i].value, vm->codeIndexByName[i].key);
+            }
+            VM_free(vm);
+            DataWin_free(dataWin);
+            return 0;
         }
-    }
-    const char* savePath = args.saveFolder != nullptr ? args.saveFolder : dataWinDir;
-    OverlayFileSystem* overlayFs = OverlayFileSystem_create(dataWinDir, savePath);
-    free(dataWinDir);
 
-    // Init GLFW
+        if (args.printUnknownFunctions) {
+            uint32_t unimplementedCount = 0;
+            fprintf(stderr, "Unknown Functions:\n");
+            repeat(dataWin->func.functionCount, i) {
+                const char* name = dataWin->func.functions[i].name;
+                if (name == nullptr)
+                    continue;
+
+                // Implemented as a user script/code entry?
+                if (shgeti(vm->codeIndexByName, (char*) name) >= 0)
+                    continue;
+
+                // Implemented as a registered builtin?
+                if (VM_findBuiltin(vm, name) != nullptr)
+                    continue;
+
+                fprintf(stderr, "- %s\n", name);
+                unimplementedCount++;
+            }
+
+            if (unimplementedCount == 0) {
+                fprintf(stderr, "All %u referenced functions are implemented! :3\n", dataWin->func.functionCount);
+            } else {
+                fprintf(stderr, "%u unknown function(s) out of %u referenced\n", unimplementedCount, dataWin->func.functionCount);
+            }
+            VM_free(vm);
+            DataWin_free(dataWin);
+            return 0;
+        }
+
+        if (shlen(args.disassemble) > 0) {
+            VM_buildCrossReferences(vm);
+            if (shgeti(args.disassemble, "*") >= 0) {
+                repeat(dataWin->code.count, i) {
+                    VM_disassemble(vm, (int32_t) i);
+                }
+            } else {
+                for (ptrdiff_t i = 0; shlen(args.disassemble) > i; i++) {
+                    const char* name = args.disassemble[i].key;
+                    ptrdiff_t idx = shgeti(vm->codeIndexByName, (char*) name);
+                    if (idx >= 0) {
+                        VM_disassemble(vm, vm->codeIndexByName[idx].value);
+                    } else {
+                        fprintf(stderr, "Error: Script '%s' not found in funcMap\n", name);
+                    }
+                }
+            }
+            VM_free(vm);
+            DataWin_free(dataWin);
+            freeCommandLineArgs(&args);
+            return 0;
+        }
+
+        // Initialize the file system
+        char* dataWinDir = nullptr;
+        {
+            const char* lastSlash = strrchr(args.dataWinPath, '/');
+            const char* lastBackslash = strrchr(args.dataWinPath, '\\');
+            if (lastBackslash != nullptr && (lastSlash == nullptr || lastBackslash > lastSlash))
+                lastSlash = lastBackslash;
+            if (lastSlash != nullptr) {
+                size_t len = (size_t) (lastSlash - args.dataWinPath + 1);
+                dataWinDir = safeMalloc(len + 1);
+                memcpy(dataWinDir, args.dataWinPath, len);
+                dataWinDir[len] = '\0';
+            } else {
+                dataWinDir = safeStrdup("./");
+            }
+        }
+        const char* savePath = args.saveFolder != nullptr ? args.saveFolder : dataWinDir;
+        OverlayFileSystem* overlayFs = OverlayFileSystem_create(dataWinDir, savePath);
+        free(dataWinDir);
+
+        // Init GLFW
 #ifndef USE_GLFW2
-    glfwSetErrorCallback(glfwErrorCallback);
+        glfwSetErrorCallback(glfwErrorCallback);
 #endif
-    if (!glfwInit()) {
-        fprintf(stderr, "Failed to initialize GLFW\n");
-        DataWin_free(dataWin);
-        freeCommandLineArgs(&args);
-        return 1;
-    }
+        if (!glfwInit()) {
+            fprintf(stderr, "Failed to initialize GLFW\n");
+            DataWin_free(dataWin);
+            freeCommandLineArgs(&args);
+            return 1;
+        }
 
-    bool modernGL = strcmp(args.renderer, "gl") == 0;
-    bool legacyGL = strcmp(args.renderer, "legacy-gl") == 0;
+        bool modernGL = strcmp(args.renderer, "gl") == 0;
+        bool legacyGL = strcmp(args.renderer, "legacy-gl") == 0;
 
 #ifndef ENABLE_LEGACY_GL
-    if (legacyGL) {
-        fprintf(stderr, "The legacy-gl renderer is not available in this build!\n");
-        return 0;
-    }
+        if (legacyGL) {
+            fprintf(stderr, "The legacy-gl renderer is not available in this build!\n");
+            return 0;
+        }
 #endif
 #ifndef ENABLE_MODERN_GL
-    if (modernGL) {
-        fprintf(stderr, "The modern gl renderer is not available in this build!\n");
-        return 0;
-    }
-#endif
-    if (!modernGL && !legacyGL) {
-        fprintf(stderr, "Unknown renderer: %s!\n", args.renderer);
-        return 0;
-    }
-
-    if (!modernGL && hmlen(args.screenshotSurfacesFrames)) {
-        fprintf(stderr, "You can't use --screenshot-surfaces with --renderer legacy-gl!\n");
-        return 0;
-    }
-
-#ifndef USE_GLFW2
-    if (!modernGL) {
-        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 1);
-        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
-    } else {
-#ifdef ENABLE_GLES
-        glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_ES_API);
-        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
-#else
-        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
-        glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-        glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-        glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GL_TRUE);
-#endif
-    }
-#endif
-
-#ifndef USE_GLFW2
-    // Load SDL gamecontroller mappings
-    {
-        const char* dbPath = "gamecontrollerdb.txt";
-        FILE* f = fopen(dbPath, "r");
-        if (f != NULL) {
-            fseek(f, 0, SEEK_END);
-            long len = ftell(f);
-            fseek(f, 0, SEEK_SET);
-            char* buffer = (char*) malloc(len + 1);
-            if (buffer != NULL) {
-                fread(buffer, 1, len, f);
-                buffer[len] = '\0';
-                GlfwGamepad_loadMappings(buffer);
-                free(buffer);
-            }
-            fclose(f);
-        } else {
-            fprintf(stderr, "Gamepad: SDL gamecontrollerdb.txt not found at %s, using defaults\n", dbPath);
+        if (modernGL) {
+            fprintf(stderr, "The modern gl renderer is not available in this build!\n");
+            return 0;
         }
-    }
+#endif
+        if (!modernGL && !legacyGL) {
+            fprintf(stderr, "Unknown renderer: %s!\n", args.renderer);
+            return 0;
+        }
 
-    if (args.headless) {
-        glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
-    }
+        if (!modernGL && hmlen(args.screenshotSurfacesFrames)) {
+            fprintf(stderr, "You can't use --screenshot-surfaces with --renderer legacy-gl!\n");
+            return 0;
+        }
+
+#ifndef USE_GLFW2
+        if (!modernGL) {
+            glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 1);
+            glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
+        } else {
+#ifdef ENABLE_GLES
+            glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_ES_API);
+            glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+            glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
+#else
+            glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+            glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
+            glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+            glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+            glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GL_TRUE);
+#endif
+        }
+#endif
+
+#ifndef USE_GLFW2
+        // Load SDL gamecontroller mappings
+        {
+            const char* dbPath = "gamecontrollerdb.txt";
+            FILE* f = fopen(dbPath, "r");
+            if (f != NULL) {
+                fseek(f, 0, SEEK_END);
+                long len = ftell(f);
+                fseek(f, 0, SEEK_SET);
+                char* buffer = (char*) malloc(len + 1);
+                if (buffer != NULL) {
+                    fread(buffer, 1, len, f);
+                    buffer[len] = '\0';
+                    GlfwGamepad_loadMappings(buffer);
+                    free(buffer);
+                }
+                fclose(f);
+            } else {
+                fprintf(stderr, "Gamepad: SDL gamecontrollerdb.txt not found at %s, using defaults\n", dbPath);
+            }
+        }
+
+        if (args.headless) {
+            glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+        }
 #endif
 
 #ifdef USE_GLFW2
-    int window = glfwOpenWindow((int) gen8->defaultWindowWidth, (int) gen8->defaultWindowHeight, 8, 8, 8, 8, 24, 8, GLFW_WINDOW);
+        int window = glfwOpenWindow((int) gen8->defaultWindowWidth, (int) gen8->defaultWindowHeight, 8, 8, 8, 8, 24, 8, GLFW_WINDOW);
 #else
-    GLFWwindow* window = glfwCreateWindow((int) gen8->defaultWindowWidth, (int) gen8->defaultWindowHeight, windowTitle, nullptr, nullptr);
+        GLFWwindow* window = glfwCreateWindow((int) gen8->defaultWindowWidth, (int) gen8->defaultWindowHeight, windowTitle, nullptr, nullptr);
 #endif
-    if (!window) {
-        fprintf(stderr, "Failed to create GLFW window\n");
-        glfwTerminate();
-        DataWin_free(dataWin);
-        freeCommandLineArgs(&args);
-        return 1;
-    }
+        if (!window) {
+            fprintf(stderr, "Failed to create GLFW window\n");
+            glfwTerminate();
+            DataWin_free(dataWin);
+            freeCommandLineArgs(&args);
+            return 1;
+        }
 
 #ifndef USE_GLFW2
-    glfwMakeContextCurrent(window);
+        glfwMakeContextCurrent(window);
 #endif
-    glfwSwapInterval(0); // Disable v-sync, we control timing ourselves
+        glfwSwapInterval(0); // Disable v-sync, we control timing ourselves
 
-    // Load OpenGL function pointers via GLAD
+        // Load OpenGL function pointers via GLAD
 #ifdef ENABLE_GLES
-    if (!gladLoadGLES2Loader((GLADloadproc) glfwGetProcAddress)) {
+        if (!gladLoadGLES2Loader((GLADloadproc) glfwGetProcAddress)) {
 #else
-    if (!gladLoadGLLoader((GLADloadproc) glfwGetProcAddress)) {
+        if (!gladLoadGLLoader((GLADloadproc) glfwGetProcAddress)) {
 #endif
-        fprintf(stderr, "Failed to initialize GLAD\n");
+            fprintf(stderr, "Failed to initialize GLAD\n");
+#ifdef USE_GLFW2
+            glfwCloseWindow();
+#else
+            glfwDestroyWindow(window);
+#endif
+            glfwTerminate();
+            DataWin_free(dataWin);
+            freeCommandLineArgs(&args);
+            return 1;
+        }
+
+        // Install the OpenGL debug message callback
+#ifndef ENABLE_GLES
+        if (modernGL)
+            installGLDebugCallback();
+#endif
+
+        // Initialize the renderer
+        Renderer* renderer = nullptr;
+#ifdef ENABLE_GLES
+        if (strcmp(args.renderer, "legacy-gl") == 0) {
+            fprintf(stderr, "--renderer legacy-gl is not available in GLES builds; falling back to gl\n");
+        }
+        renderer = GLRenderer_create();
+#else
+        if(strcmp(args.renderer, "legacy-gl") == 0) {
+#ifdef ENABLE_LEGACY_GL
+            renderer = GLLegacyRenderer_create();
+#endif
+        } else {
+#ifdef ENABLE_MODERN_GL
+            renderer = GLRenderer_create();
+#endif
+        }
+#endif
+
+        // Initialize the audio system
+        AudioSystem* audioSystem = nullptr;
+        if (args.headless) {
+            audioSystem = (AudioSystem*) NoopAudioSystem_create();
+        } else {
+#if defined(USE_OPENAL)
+            audioSystem = (AudioSystem*) AlAudioSystem_create();
+#elif defined(USE_MINIAUDIO)
+            audioSystem = (AudioSystem*) MaAudioSystem_create();
+#else
+            audioSystem = (AudioSystem*) NoopAudioSystem_create();
+#endif
+        }
+
+        // Initialize the runner
+        Runner* runner = Runner_create(dataWin, vm, renderer, (FileSystem*) overlayFs, audioSystem);
+        runner->debugMode = args.debug;
+        runner->osType = args.osType;
+        Runner_setGameArgs(runner, currentGameArgs, (int32_t) arrlen(currentGameArgs));
+        runner->setWindowTitle = setGlfwWindowTitle;
+        runner->getWindowSize = getGlfwWindowSize;
+        runner->setWindowSize = setGlfwWindowSize;
+        runner->windowHasFocus = getGlfwWindowFocus;
+#ifdef USE_GLFW2
+        runner->nativeWindow = (void*)0xDEADBEEF;
+        g_runner = runner;
+#else
+        runner->nativeWindow = window;
+#endif
+
+        // Set up input recording/playback (both can be active: playback then continue recording)
+        if (args.playbackInputsPath != nullptr) {
+            globalInputRecording = InputRecording_createPlayer(args.playbackInputsPath, args.recordInputsPath);
+        } else if (args.recordInputsPath != nullptr) {
+            globalInputRecording = InputRecording_createRecorder(args.recordInputsPath);
+        }
+        if (globalInputRecording != nullptr) {
+            globalInputRecording->filterDebugKeys = args.debug;
+            installCrashHandlers();
+        }
+        shcopyFromTo(args.varReadsToBeTraced, runner->vmContext->varReadsToBeTraced);
+        shcopyFromTo(args.varWritesToBeTraced, runner->vmContext->varWritesToBeTraced);
+        shcopyFromTo(args.functionCallsToBeTraced, runner->vmContext->functionCallsToBeTraced);
+        shcopyFromTo(args.alarmsToBeTraced, runner->vmContext->alarmsToBeTraced);
+        shcopyFromTo(args.instanceLifecyclesToBeTraced, runner->vmContext->instanceLifecyclesToBeTraced);
+        shcopyFromTo(args.eventsToBeTraced, runner->vmContext->eventsToBeTraced);
+        shcopyFromTo(args.collisionsToBeTraced, runner->vmContext->collisionsToBeTraced);
+        shcopyFromTo(args.opcodesToBeTraced, runner->vmContext->opcodesToBeTraced);
+        shcopyFromTo(args.stackToBeTraced, runner->vmContext->stackToBeTraced);
+        shcopyFromTo(args.tilesToBeTraced, runner->vmContext->tilesToBeTraced);
+        runner->vmContext->traceBytecodeAfterFrame = args.traceBytecodeAfterFrame;
+        runner->vmContext->alwaysLogUnknownFunctions = args.alwaysLogUnknownFunctions;
+        runner->vmContext->alwaysLogStubbedFunctions = args.alwaysLogStubbedFunctions;
+        runner->vmContext->traceEventInherited = args.traceEventInherited;
+
+        // Set up keyboard input
+#ifdef USE_GLFW2
+        glfwSetKeyCallback(keyCallback);
+        glfwSetCharCallback(characterCallback);
+#else
+        glfwSetWindowUserPointer(window, runner);
+        glfwSetKeyCallback(window, keyCallback);
+        glfwSetCharCallback(window, characterCallback);
+#endif
+
+#ifndef _WIN32
+        struct sigaction sa = { .sa_handler = onCrashSignal };
+        sigemptyset(&sa.sa_mask);
+        struct sigaction prev;
+        sigaction(SIGABRT, &sa, &prev);
+        PreviousSignalActionEntry p;
+        p.key = SIGABRT;
+        p.value = prev;
+        hmputs(previousSignalActions, p);
+        sigaction(SIGSEGV, &sa, &prev);
+        PreviousSignalActionEntry p2;
+        p.key = SIGSEGV;
+        p.value = prev;
+        hmputs(previousSignalActions, p2);
+#endif
+
+        // Initialize the first room and fire Game Start / Room Start events
+        Runner_initFirstRoom(runner);
+
+        // Main loop
+        bool debugPaused = false;
+        bool debugShowCollisionMasks = false;
+        bool actuallyShuttingDown = false;
+        double lastFrameTime = glfwGetTime();
+        while (true) {
+#ifdef USE_GLFW2
+            bool shouldWindowClose = !glfwGetWindowParam(GLFW_OPENED);
+#else
+            bool shouldWindowClose = glfwWindowShouldClose(window);
+#endif
+            if (runner->shouldExit || shouldWindowClose) {
+                actuallyShuttingDown = true;
+                break;
+            }
+
+            if (runner->pendingWorkingDirectory != nullptr && runner->pendingLaunchParameters != nullptr) {
+                // Break from the game loop, we'll handle this later
+                break;
+            }
+
+            // Clear last frame's pressed/released state, then poll new input events
+            RunnerKeyboard_beginFrame(runner->keyboard);
+            RunnerGamepad_beginFrame(runner->gamepads);
+            glfwPollEvents();
+#ifndef USE_GLFW2
+            GlfwGamepad_poll(runner->gamepads);
+#endif
+
+            // Debug key bindings
+            if (runner->debugMode) {
+                // Pause
+                if (RunnerKeyboard_checkPressed(runner->keyboard, 'P')) {
+                    debugPaused = !debugPaused;
+                    fprintf(stderr, "Debug: %s\n", debugPaused ? "Paused" : "Resumed");
+                }
+            }
+
+            // Run the game step if the game is paused
+            bool shouldStep = true;
+            if (runner->debugMode && debugPaused) {
+                shouldStep = RunnerKeyboard_checkPressed(runner->keyboard, 'O');
+                if (shouldStep) fprintf(stderr, "Debug: Frame advance (frame %d)\n", runner->frameCount);
+            }
+
+            double frameStartTime = 0;
+
+            if (shouldStep) {
+                if (args.traceFrames) {
+                    frameStartTime = glfwGetTime();
+                    fprintf(stderr, "Frame %d (Start)\n", runner->frameCount);
+                }
+
+                // Process input recording/playback (must happen after glfwPollEvents, before Runner_step)
+                InputRecording_processFrame(globalInputRecording, runner->keyboard, runner->frameCount);
+
+                // Go to next room
+                if (RunnerKeyboard_checkPressed(runner->keyboard, VK_PAGEUP)) {
+                    DataWin* dw = runner->dataWin;
+                    if ((int32_t) dw->gen8.roomOrderCount > runner->currentRoomOrderPosition + 1) {
+                        int32_t nextIdx = dw->gen8.roomOrder[runner->currentRoomOrderPosition + 1];
+                        runner->pendingRoom = nextIdx;
+                        runner->audioSystem->vtable->stopAll(runner->audioSystem);
+                        fprintf(stderr, "Debug: Going to next room -> %s\n", dw->room.rooms[nextIdx].name);
+                    }
+                }
+
+                // Go to previous room
+                if (RunnerKeyboard_checkPressed(runner->keyboard, VK_PAGEDOWN)) {
+                    DataWin* dw = runner->dataWin;
+                    if (runner->currentRoomOrderPosition > 0) {
+                        int32_t prevIdx = dw->gen8.roomOrder[runner->currentRoomOrderPosition - 1];
+                        runner->pendingRoom = prevIdx;
+                        runner->audioSystem->vtable->stopAll(runner->audioSystem);
+                        fprintf(stderr, "Debug: Going to previous room -> %s\n", dw->room.rooms[prevIdx].name);
+                    }
+                }
+
+                // Dump runner state to console
+                if (RunnerKeyboard_checkPressed(runner->keyboard, VK_F12)) {
+                    fprintf(stderr, "Debug: Dumping runner state at frame %d\n", runner->frameCount);
+                    Runner_dumpState(runner);
+                }
+
+                if (RunnerKeyboard_checkPressed(runner->keyboard, VK_F11)) {
+                    fprintf(stderr, "Debug: Dumping runner state at frame %d\n", runner->frameCount);
+                    char* json = Runner_dumpStateJson(runner);
+
+                    if (args.dumpJsonFilePattern != nullptr) {
+                        char filename[512];
+                        snprintf(filename, sizeof(filename), args.dumpJsonFilePattern, runner->frameCount);
+                        FILE* f = fopen(filename, "w");
+                        if (f != nullptr) {
+                            fwrite(json, 1, strlen(json), f);
+                            fputc('\n', f);
+                            fclose(f);
+                            printf("JSON dump saved: %s\n", filename);
+                        } else {
+                            fprintf(stderr, "Error: Could not write JSON dump to '%s'\n", filename);
+                        }
+                    } else {
+                        printf("%s\n", json);
+                    }
+
+                    free(json);
+                }
+
+                // Toggle the collision mask debug overlay
+                if (RunnerKeyboard_checkPressed(runner->keyboard, VK_F2)) {
+                    debugShowCollisionMasks = !debugShowCollisionMasks;
+                    fprintf(stderr, "Debug: Collision mask overlay %s!\n", debugShowCollisionMasks ? "enabled" : "disabled");
+                }
+
+                // Reset global interact state because I HATE when I get stuck while moving through rooms
+                if (RunnerKeyboard_checkPressed(runner->keyboard, VK_F10)) {
+                    int32_t interactVarId = shget(runner->vmContext->globalVarNameMap, "interact");
+
+                    runner->vmContext->globalVars[interactVarId] = RValue_makeInt32(0);
+                    printf("Changed global.interact [%d] value!\n", interactVarId);
+                }
+
+                // Run one game step (Begin Step, Keyboard, Alarms, Step, End Step, room transitions)
+                Runner_step(runner);
+
+                if (args.profilerFramesBetween > 0 && runner->frameCount > 0 && runner->frameCount % args.profilerFramesBetween == 0) {
+                    char* profilerReport = Profiler_createReport(vm->profiler, 20, args.profilerFramesBetween);
+                    if (profilerReport != nullptr) {
+                        fprintf(stderr, "%s\n", profilerReport);
+                        free(profilerReport);
+                    }
+                    Profiler_reset(vm->profiler);
+                }
+
+                // Update audio system (gain fading, cleanup ended sounds)
+                float dt = (float) (glfwGetTime() - lastFrameTime);
+                if (0.0f > dt) dt = 0.0f;
+                if (dt > 0.1f) dt = 0.1f; // cap delta to avoid huge fades on lag spikes
+                runner->audioSystem->vtable->update(runner->audioSystem, dt);
+
+                // Dump full runner state if this frame was requested
+                if (hmget(args.dumpFrames, runner->frameCount)) {
+                    Runner_dumpState(runner);
+                }
+
+                // Dump runner state as JSON if this frame was requested
+                if (hmget(args.dumpJsonFrames, runner->frameCount)) {
+                    char* json = Runner_dumpStateJson(runner);
+                    if (args.dumpJsonFilePattern != nullptr) {
+                        char filename[512];
+                        snprintf(filename, sizeof(filename), args.dumpJsonFilePattern, runner->frameCount);
+                        FILE* f = fopen(filename, "w");
+                        if (f != nullptr) {
+                            fwrite(json, 1, strlen(json), f);
+                            fputc('\n', f);
+                            fclose(f);
+                            printf("JSON dump saved: %s\n", filename);
+                        } else {
+                            fprintf(stderr, "Error: Could not write JSON dump to '%s'\n", filename);
+                        }
+                    } else {
+                        printf("%s\n", json);
+                    }
+                    free(json);
+                }
+
+                // Query actual framebuffer size (differs from window size on Wayland with fractional scaling)
+                int fbWidth, fbHeight;
+#ifdef USE_GLFW2
+                glfwGetWindowSize(&fbWidth, &fbHeight);
+#else
+                glfwGetFramebufferSize(window, &fbWidth, &fbHeight);
+#endif
+
+                // Clear the default framebuffer (window background) to black
+                glBindFramebuffer(GL_FRAMEBUFFER, 0);
+                glClear(GL_COLOR_BUFFER_BIT);
+
+                if (!runner->appSurfaceEnabled) {
+                    runner->applicationWidth = fbWidth;
+                    runner->applicationHeight = fbHeight;
+                    runner->usingAppSurface = false;
+                } else {
+                    if (runner->applicationWidth <= 0 || runner->applicationHeight <= 0) {
+                        runner->applicationWidth = (int32_t) gen8->defaultWindowWidth;
+                        runner->applicationHeight = (int32_t) gen8->defaultWindowHeight;
+                    }
+                    runner->usingAppSurface = true;
+                }
+
+                int32_t gameW = runner->applicationWidth;
+                int32_t gameH = runner->applicationHeight;
+
+                // The application surface (FBO) is sized to defaultWindowWidth x defaultWindowHeight.
+                // It is a bit hard to understand, but here's how it works:
+                // The Port X/Port Y controls the position of the game viewport within the application surface.
+                // The Port W/Port H controls the size of the game viewport within the application surface.
+                // Think of it like if you had an image (or... well, a framebuffer) and you are "pasting" it over the application surface.
+                // And the Port W/Port H are scaled by the window size too (set by the GEN8 chunk)
+                float displayScaleX;
+                float displayScaleY;
+
+                Runner_drawPre(runner, fbWidth, fbHeight);
+                Runner_computeViewDisplayScale(runner, gameW, gameH, &displayScaleX, &displayScaleY);
+
+                Runner_beginFrame(runner, gameW, gameH, fbWidth, fbHeight);
+
+                // Clear FBO with room background color
+                if (runner->drawBackgroundColor) {
+                    int rInt = BGR_R(runner->backgroundColor);
+                    int gInt = BGR_G(runner->backgroundColor);
+                    int bInt = BGR_B(runner->backgroundColor);
+                    int aInt = BGR_A(runner->backgroundColor);
+                    glClearColor(rInt / 255.0f, gInt / 255.0f, bInt / 255.0f, aInt / 255.0f);
+                } else {
+                    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+                }
+                glClear(GL_COLOR_BUFFER_BIT);
+
+                Runner_drawViews(runner, gameW, gameH, displayScaleX, displayScaleY, debugShowCollisionMasks);
+                renderer->vtable->endFrameInit(renderer);
+                Runner_drawPost(runner, fbWidth, fbHeight);
+                renderer->vtable->endFrameEnd(renderer);
+                Runner_drawGUI(runner, fbWidth, fbHeight, gameW, gameH);
+
+                // Capture screenshot if this frame matches a requested frame
+                bool shouldScreenshot = hmget(args.screenshotFrames, runner->frameCount);
+
+                if (shouldScreenshot) {
+                    int32_t appId = runner->applicationSurfaceId;
+                    GLuint readFbo;
+#ifdef ENABLE_LEGACY_GL
+                    if (strcmp(args.renderer, "legacy-gl") == 0) {
+                        readFbo = ((GLLegacyRenderer*) renderer)->surfaces[appId];
+                    } else
+#endif
+                    {
+                        readFbo = ((GLRenderer*) renderer)->surfaces[appId];
+                    }
+                    captureScreenshot(readFbo, args.screenshotPattern, runner->frameCount, gameW, gameH);
+                    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+                }
+
+                // Dump all surfaces if this frame matches a requested frame
+                bool shouldDumpSurfaces = hmget(args.screenshotSurfacesFrames, runner->frameCount);
+
+                if (shouldDumpSurfaces) {
+                    GLRenderer* gl = (GLRenderer*) renderer;
+                    dumpAllSurfaces(gl, args.screenshotSurfacesPattern, runner->frameCount);
+                    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+                }
+
+                if (args.exitAtFrame >= 0 && runner->frameCount >= args.exitAtFrame) {
+                    printf("Exiting at frame %d (--exit-at-frame)\n", runner->frameCount);
+#ifdef USE_GLFW2
+                    glfwCloseWindow();
+#else
+                    glfwSetWindowShouldClose(window, GLFW_TRUE);
+#endif
+                }
+
+                if (shouldStep && args.traceFrames) {
+                    double frameElapsedMs = (glfwGetTime() - frameStartTime) * 1000.0;
+                    fprintf(stderr, "Frame %d (End, %.2f ms)\n", runner->frameCount, frameElapsedMs);
+                }
+
+                // Only swap when there isn't a room change to match the original runner.
+                if (runner->pendingRoom == -1) {
+#ifdef USE_GLFW2
+                    glfwSwapBuffers();
+#else
+                    glfwSwapBuffers(window);
+#endif
+                }
+                Runner_handlePendingRoomChange(runner);
+            }
+
+            // Limit frame rate to room speed (skip in headless mode for max speed!!)
+            if (!args.headless && runner->currentRoom->speed > 0) {
+                static bool fastForwardActive = false;
+                static bool fastForwardTabPrev = false;
+                bool fastForwardTabNow = glfwGetKey(
+    #ifndef USE_GLFW2
+                        window,
+    #endif
+                        GLFW_KEY_TAB) == GLFW_PRESS;
+                if (args.fastForwardSpeed > 0.0 && fastForwardTabNow && !fastForwardTabPrev) {
+                    fastForwardActive = !fastForwardActive;
+                    lastFrameTime = glfwGetTime();
+                }
+                fastForwardTabPrev = fastForwardTabNow;
+                double effectiveSpeed = (args.fastForwardSpeed > 0.0 && fastForwardActive) ? args.fastForwardSpeed : args.speedMultiplier;
+                double targetFrameTime = 1.0 / (runner->currentRoom->speed * effectiveSpeed);
+                double nextFrameTime = lastFrameTime + targetFrameTime;
+                // Sleep for most of the remaining time, then spin-wait for precision
+                double remaining = nextFrameTime - glfwGetTime();
+                if (remaining > 0.002) {
+#ifdef _WIN32
+                    Sleep((DWORD) ((remaining - 0.001) * 1000));
+#else
+                    struct timespec ts = {
+                        .tv_sec = 0,
+                        .tv_nsec = (long) ((remaining - 0.001) * 1e9)
+                    };
+                    nanosleep(&ts, nullptr);
+#endif
+                }
+                while (glfwGetTime() < nextFrameTime) {
+                    // Spin-wait for the remaining sub-millisecond
+                }
+                lastFrameTime = nextFrameTime;
+            } else {
+                lastFrameTime = glfwGetTime();
+            }
+        }
+
+        saveInputRecording();
+
+        // Snapshot any pending game_change request before we tear the runner down
+        char* nextWorkingDirectory = runner->pendingWorkingDirectory;
+        char* nextLaunchParameters = runner->pendingLaunchParameters;
+        runner->pendingWorkingDirectory = nullptr;
+        runner->pendingLaunchParameters = nullptr;
+
+        // Cleanup
+        runner->audioSystem->vtable->destroy(runner->audioSystem);
+        runner->audioSystem = nullptr;
+        renderer->vtable->destroy(renderer);
+
 #ifdef USE_GLFW2
         glfwCloseWindow();
 #else
         glfwDestroyWindow(window);
 #endif
         glfwTerminate();
-        DataWin_free(dataWin);
-        freeCommandLineArgs(&args);
-        return 1;
-    }
 
-    // Install the OpenGL debug message callback
-#ifndef ENABLE_GLES
-    if (modernGL)
-        installGLDebugCallback();
-#endif
-
-    // Initialize the renderer
-    Renderer* renderer = nullptr;
-#ifdef ENABLE_GLES
-    if (strcmp(args.renderer, "legacy-gl") == 0) {
-        fprintf(stderr, "--renderer legacy-gl is not available in GLES builds; falling back to gl\n");
-    }
-    renderer = GLRenderer_create();
-#else
-    if(strcmp(args.renderer, "legacy-gl") == 0) {
-#ifdef ENABLE_LEGACY_GL
-        renderer = GLLegacyRenderer_create();
-#endif
-    } else {
-#ifdef ENABLE_MODERN_GL
-        renderer = GLRenderer_create();
-#endif
-    }
-#endif
-
-    // Initialize the audio system
-    AudioSystem* audioSystem = nullptr;
-    if (args.headless) {
-        audioSystem = (AudioSystem*) NoopAudioSystem_create();
-    } else {
-#if defined(USE_OPENAL)
-        audioSystem = (AudioSystem*) AlAudioSystem_create();
-#elif defined(USE_MINIAUDIO)
-        audioSystem = (AudioSystem*) MaAudioSystem_create();
-#else
-        audioSystem = (AudioSystem*) NoopAudioSystem_create();
-#endif
-    }
-
-    // Initialize the runner
-    Runner* runner = Runner_create(dataWin, vm, renderer, (FileSystem*) overlayFs, audioSystem);
-    runner->debugMode = args.debug;
-    runner->osType = args.osType;
-    Runner_setGameArgs(runner, args.gameArgs, (int32_t) arrlen(args.gameArgs));
-    runner->setWindowTitle = setGlfwWindowTitle;
-    runner->getWindowSize = getGlfwWindowSize;
-    runner->setWindowSize = setGlfwWindowSize;
-    runner->windowHasFocus = getGlfwWindowFocus;
-#ifdef USE_GLFW2
-    runner->nativeWindow = (void*)0xDEADBEEF;
-    g_runner = runner;
-#else
-    runner->nativeWindow = window;
-#endif
-
-    // Set up input recording/playback (both can be active: playback then continue recording)
-    if (args.playbackInputsPath != nullptr) {
-        globalInputRecording = InputRecording_createPlayer(args.playbackInputsPath, args.recordInputsPath);
-    } else if (args.recordInputsPath != nullptr) {
-        globalInputRecording = InputRecording_createRecorder(args.recordInputsPath);
-    }
-    if (globalInputRecording != nullptr) {
-        globalInputRecording->filterDebugKeys = args.debug;
-        installCrashHandlers();
-    }
-    shcopyFromTo(args.varReadsToBeTraced, runner->vmContext->varReadsToBeTraced);
-    shcopyFromTo(args.varWritesToBeTraced, runner->vmContext->varWritesToBeTraced);
-    shcopyFromTo(args.functionCallsToBeTraced, runner->vmContext->functionCallsToBeTraced);
-    shcopyFromTo(args.alarmsToBeTraced, runner->vmContext->alarmsToBeTraced);
-    shcopyFromTo(args.instanceLifecyclesToBeTraced, runner->vmContext->instanceLifecyclesToBeTraced);
-    shcopyFromTo(args.eventsToBeTraced, runner->vmContext->eventsToBeTraced);
-    shcopyFromTo(args.collisionsToBeTraced, runner->vmContext->collisionsToBeTraced);
-    shcopyFromTo(args.opcodesToBeTraced, runner->vmContext->opcodesToBeTraced);
-    shcopyFromTo(args.stackToBeTraced, runner->vmContext->stackToBeTraced);
-    shcopyFromTo(args.tilesToBeTraced, runner->vmContext->tilesToBeTraced);
-    runner->vmContext->traceBytecodeAfterFrame = args.traceBytecodeAfterFrame;
-    runner->vmContext->alwaysLogUnknownFunctions = args.alwaysLogUnknownFunctions;
-    runner->vmContext->alwaysLogStubbedFunctions = args.alwaysLogStubbedFunctions;
-    runner->vmContext->traceEventInherited = args.traceEventInherited;
-
-    // Set up keyboard input
-#ifdef USE_GLFW2
-    glfwSetKeyCallback(keyCallback);
-    glfwSetCharCallback(characterCallback);
-#else
-    glfwSetWindowUserPointer(window, runner);
-    glfwSetKeyCallback(window, keyCallback);
-    glfwSetCharCallback(window, characterCallback);
-#endif
-
-#ifndef _WIN32
-    struct sigaction sa = { .sa_handler = onCrashSignal };
-    sigemptyset(&sa.sa_mask);
-    struct sigaction prev;
-    sigaction(SIGABRT, &sa, &prev);
-    PreviousSignalActionEntry p;
-    p.key = SIGABRT;
-    p.value = prev;
-    hmputs(previousSignalActions, p);
-    sigaction(SIGSEGV, &sa, &prev);
-    PreviousSignalActionEntry p2;
-    p.key = SIGSEGV;
-    p.value = prev;
-    hmputs(previousSignalActions, p2);
-#endif
-
-    // Initialize the first room and fire Game Start / Room Start events
-    Runner_initFirstRoom(runner);
-
-    // Main loop
-    bool debugPaused = false;
-    bool debugShowCollisionMasks = false;
-    double lastFrameTime = glfwGetTime();
-    while (true) {
-#ifdef USE_GLFW2
-        bool shouldWindowClose = !glfwGetWindowParam(GLFW_OPENED);
-#else
-        bool shouldWindowClose = glfwWindowShouldClose(window);
-#endif
-        if (runner->shouldExit || shouldWindowClose)
-            break;
-
-        // Clear last frame's pressed/released state, then poll new input events
-        RunnerKeyboard_beginFrame(runner->keyboard);
-        RunnerGamepad_beginFrame(runner->gamepads);
-        glfwPollEvents();
-#ifndef USE_GLFW2
-        GlfwGamepad_poll(runner->gamepads);
-#endif
-
-        // Debug key bindings
-        if (runner->debugMode) {
-            // Pause
-            if (RunnerKeyboard_checkPressed(runner->keyboard, 'P')) {
-                debugPaused = !debugPaused;
-                fprintf(stderr, "Debug: %s\n", debugPaused ? "Paused" : "Resumed");
-            }
-        }
-
-        // Run the game step if the game is paused
-        bool shouldStep = true;
-        if (runner->debugMode && debugPaused) {
-            shouldStep = RunnerKeyboard_checkPressed(runner->keyboard, 'O');
-            if (shouldStep) fprintf(stderr, "Debug: Frame advance (frame %d)\n", runner->frameCount);
-        }
-
-        double frameStartTime = 0;
-
-        if (shouldStep) {
-            if (args.traceFrames) {
-                frameStartTime = glfwGetTime();
-                fprintf(stderr, "Frame %d (Start)\n", runner->frameCount);
-            }
-
-            // Process input recording/playback (must happen after glfwPollEvents, before Runner_step)
-            InputRecording_processFrame(globalInputRecording, runner->keyboard, runner->frameCount);
-
-                        // Go to next room
-            if (RunnerKeyboard_checkPressed(runner->keyboard, VK_PAGEUP)) {
-                DataWin* dw = runner->dataWin;
-                if ((int32_t) dw->gen8.roomOrderCount > runner->currentRoomOrderPosition + 1) {
-                    int32_t nextIdx = dw->gen8.roomOrder[runner->currentRoomOrderPosition + 1];
-                    runner->pendingRoom = nextIdx;
-                    runner->audioSystem->vtable->stopAll(runner->audioSystem);
-                    fprintf(stderr, "Debug: Going to next room -> %s\n", dw->room.rooms[nextIdx].name);
-                }
-            }
-
-            // Go to previous room
-            if (RunnerKeyboard_checkPressed(runner->keyboard, VK_PAGEDOWN)) {
-                DataWin* dw = runner->dataWin;
-                if (runner->currentRoomOrderPosition > 0) {
-                    int32_t prevIdx = dw->gen8.roomOrder[runner->currentRoomOrderPosition - 1];
-                    runner->pendingRoom = prevIdx;
-                    runner->audioSystem->vtable->stopAll(runner->audioSystem);
-                    fprintf(stderr, "Debug: Going to previous room -> %s\n", dw->room.rooms[prevIdx].name);
-                }
-            }
-
-            // Dump runner state to console
-            if (RunnerKeyboard_checkPressed(runner->keyboard, VK_F12)) {
-                fprintf(stderr, "Debug: Dumping runner state at frame %d\n", runner->frameCount);
-                Runner_dumpState(runner);
-            }
-
-            if (RunnerKeyboard_checkPressed(runner->keyboard, VK_F11)) {
-                fprintf(stderr, "Debug: Dumping runner state at frame %d\n", runner->frameCount);
-                char* json = Runner_dumpStateJson(runner);
-
-                if (args.dumpJsonFilePattern != nullptr) {
-                    char filename[512];
-                    snprintf(filename, sizeof(filename), args.dumpJsonFilePattern, runner->frameCount);
-                    FILE* f = fopen(filename, "w");
-                    if (f != nullptr) {
-                        fwrite(json, 1, strlen(json), f);
-                        fputc('\n', f);
-                        fclose(f);
-                        printf("JSON dump saved: %s\n", filename);
-                    } else {
-                        fprintf(stderr, "Error: Could not write JSON dump to '%s'\n", filename);
-                    }
-                } else {
-                    printf("%s\n", json);
-                }
-
-                free(json);
-            }
-
-            // Toggle the collision mask debug overlay
-            if (RunnerKeyboard_checkPressed(runner->keyboard, VK_F2)) {
-                debugShowCollisionMasks = !debugShowCollisionMasks;
-                fprintf(stderr, "Debug: Collision mask overlay %s!\n", debugShowCollisionMasks ? "enabled" : "disabled");
-            }
-
-            // Reset global interact state because I HATE when I get stuck while moving through rooms
-            if (RunnerKeyboard_checkPressed(runner->keyboard, VK_F10)) {
-                int32_t interactVarId = shget(runner->vmContext->globalVarNameMap, "interact");
-
-                runner->vmContext->globalVars[interactVarId] = RValue_makeInt32(0);
-                printf("Changed global.interact [%d] value!\n", interactVarId);
-            }
-            
-            // Run one game step (Begin Step, Keyboard, Alarms, Step, End Step, room transitions)
-            Runner_step(runner);
-
-            if (args.profilerFramesBetween > 0 && runner->frameCount > 0 && runner->frameCount % args.profilerFramesBetween == 0) {
-                char* profilerReport = Profiler_createReport(vm->profiler, 20, args.profilerFramesBetween);
-                if (profilerReport != nullptr) {
-                    fprintf(stderr, "%s\n", profilerReport);
-                    free(profilerReport);
-                }
-                Profiler_reset(vm->profiler);
-            }
-
-            // Update audio system (gain fading, cleanup ended sounds)
-            float dt = (float) (glfwGetTime() - lastFrameTime);
-            if (0.0f > dt) dt = 0.0f;
-            if (dt > 0.1f) dt = 0.1f; // cap delta to avoid huge fades on lag spikes
-            runner->audioSystem->vtable->update(runner->audioSystem, dt);
-
-            // Dump full runner state if this frame was requested
-            if (hmget(args.dumpFrames, runner->frameCount)) {
-                Runner_dumpState(runner);
-            }
-
-            // Dump runner state as JSON if this frame was requested
-            if (hmget(args.dumpJsonFrames, runner->frameCount)) {
-                char* json = Runner_dumpStateJson(runner);
-                if (args.dumpJsonFilePattern != nullptr) {
-                    char filename[512];
-                    snprintf(filename, sizeof(filename), args.dumpJsonFilePattern, runner->frameCount);
-                    FILE* f = fopen(filename, "w");
-                    if (f != nullptr) {
-                        fwrite(json, 1, strlen(json), f);
-                        fputc('\n', f);
-                        fclose(f);
-                        printf("JSON dump saved: %s\n", filename);
-                    } else {
-                        fprintf(stderr, "Error: Could not write JSON dump to '%s'\n", filename);
-                    }
-                } else {
-                    printf("%s\n", json);
-                }
-                free(json);
-            }
-
-            // Query actual framebuffer size (differs from window size on Wayland with fractional scaling)
-            int fbWidth, fbHeight;
-#ifdef USE_GLFW2
-            glfwGetWindowSize(&fbWidth, &fbHeight);
-#else
-            glfwGetFramebufferSize(window, &fbWidth, &fbHeight);
-#endif
-
-            // Clear the default framebuffer (window background) to black
-            glBindFramebuffer(GL_FRAMEBUFFER, 0);
-            glClear(GL_COLOR_BUFFER_BIT);
-
-            if (!runner->appSurfaceEnabled) {
-                runner->applicationWidth = fbWidth;
-                runner->applicationHeight = fbHeight;
-                runner->usingAppSurface = false;
-            } else {
-                if (runner->applicationWidth <= 0 || runner->applicationHeight <= 0) {
-                    runner->applicationWidth = (int32_t) gen8->defaultWindowWidth;
-                    runner->applicationHeight = (int32_t) gen8->defaultWindowHeight;
-                }
-                runner->usingAppSurface = true;
-            }
-
-            int32_t gameW = runner->applicationWidth;
-            int32_t gameH = runner->applicationHeight;
-
-            // The application surface (FBO) is sized to defaultWindowWidth x defaultWindowHeight.
-            // It is a bit hard to understand, but here's how it works:
-            // The Port X/Port Y controls the position of the game viewport within the application surface.
-            // The Port W/Port H controls the size of the game viewport within the application surface.
-            // Think of it like if you had an image (or... well, a framebuffer) and you are "pasting" it over the application surface.
-            // And the Port W/Port H are scaled by the window size too (set by the GEN8 chunk)
-            float displayScaleX;
-            float displayScaleY;
-
-            Runner_drawPre(runner, fbWidth, fbHeight);
-            Runner_computeViewDisplayScale(runner, gameW, gameH, &displayScaleX, &displayScaleY);
-
-            Runner_beginFrame(runner, gameW, gameH, fbWidth, fbHeight);
-
-            // Clear FBO with room background color
-            if (runner->drawBackgroundColor) {
-                int rInt = BGR_R(runner->backgroundColor);
-                int gInt = BGR_G(runner->backgroundColor);
-                int bInt = BGR_B(runner->backgroundColor);
-                int aInt = BGR_A(runner->backgroundColor);
-                glClearColor(rInt / 255.0f, gInt / 255.0f, bInt / 255.0f, aInt / 255.0f);
-            } else {
-                glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-            }
-            glClear(GL_COLOR_BUFFER_BIT);
-
-            Runner_drawViews(runner, gameW, gameH, displayScaleX, displayScaleY, debugShowCollisionMasks);
-            renderer->vtable->endFrameInit(renderer);
-            Runner_drawPost(runner, fbWidth, fbHeight);
-            renderer->vtable->endFrameEnd(renderer);
-            Runner_drawGUI(runner, fbWidth, fbHeight, gameW, gameH);
-
-            // Capture screenshot if this frame matches a requested frame
-            bool shouldScreenshot = hmget(args.screenshotFrames, runner->frameCount);
-
-            if (shouldScreenshot) {
-                int32_t appId = runner->applicationSurfaceId;
-                GLuint readFbo;
-#ifdef ENABLE_LEGACY_GL
-                if (strcmp(args.renderer, "legacy-gl") == 0) {
-                    readFbo = ((GLLegacyRenderer*) renderer)->surfaces[appId];
-                } else
-#endif
-                {
-                    readFbo = ((GLRenderer*) renderer)->surfaces[appId];
-                }
-                captureScreenshot(readFbo, args.screenshotPattern, runner->frameCount, gameW, gameH);
-                glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
-            }
-
-            // Dump all surfaces if this frame matches a requested frame
-            bool shouldDumpSurfaces = hmget(args.screenshotSurfacesFrames, runner->frameCount);
-
-            if (shouldDumpSurfaces) {
-                GLRenderer* gl = (GLRenderer*) renderer;
-                dumpAllSurfaces(gl, args.screenshotSurfacesPattern, runner->frameCount);
-                glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
-            }
-
-            if (args.exitAtFrame >= 0 && runner->frameCount >= args.exitAtFrame) {
-                printf("Exiting at frame %d (--exit-at-frame)\n", runner->frameCount);
-#ifdef USE_GLFW2
-                glfwCloseWindow();
-#else
-                glfwSetWindowShouldClose(window, GLFW_TRUE);
-#endif
-            }
-
-            if (shouldStep && args.traceFrames) {
-                double frameElapsedMs = (glfwGetTime() - frameStartTime) * 1000.0;
-                fprintf(stderr, "Frame %d (End, %.2f ms)\n", runner->frameCount, frameElapsedMs);
-            }
-
-            // Only swap when there isn't a room change to match the original runner.
-            if (runner->pendingRoom == -1) {
-#ifdef USE_GLFW2
-                glfwSwapBuffers();
-#else
-                glfwSwapBuffers(window);
-#endif
-            }
-            Runner_handlePendingRoomChange(runner);
-        }
-
-        // Limit frame rate to room speed (skip in headless mode for max speed!!)
-        if (!args.headless && runner->currentRoom->speed > 0) {
-            static bool fastForwardActive = false;
-            static bool fastForwardTabPrev = false;
-            bool fastForwardTabNow = glfwGetKey(
-#ifndef USE_GLFW2
-                    window,
-#endif
-                    GLFW_KEY_TAB) == GLFW_PRESS;
-            if (args.fastForwardSpeed > 0.0 && fastForwardTabNow && !fastForwardTabPrev) {
-                fastForwardActive = !fastForwardActive;
-                lastFrameTime = glfwGetTime();
-            }
-            fastForwardTabPrev = fastForwardTabNow;
-            double effectiveSpeed = (args.fastForwardSpeed > 0.0 && fastForwardActive) ? args.fastForwardSpeed : args.speedMultiplier;
-            double targetFrameTime = 1.0 / (runner->currentRoom->speed * effectiveSpeed);
-            double nextFrameTime = lastFrameTime + targetFrameTime;
-            // Sleep for most of the remaining time, then spin-wait for precision
-            double remaining = nextFrameTime - glfwGetTime();
-            if (remaining > 0.002) {
-                #ifdef _WIN32
-                Sleep((DWORD) ((remaining - 0.001) * 1000));
-                #else
-                struct timespec ts = {
-                    .tv_sec = 0,
-                    .tv_nsec = (long) ((remaining - 0.001) * 1e9)
-                };
-                nanosleep(&ts, nullptr);
-                #endif
-            }
-            while (glfwGetTime() < nextFrameTime) {
-                // Spin-wait for the remaining sub-millisecond
-            }
-            lastFrameTime = nextFrameTime;
-        } else {
-            lastFrameTime = glfwGetTime();
-        }
-    }
-
-    saveInputRecording();
-
-    // Cleanup
-    runner->audioSystem->vtable->destroy(runner->audioSystem);
-    runner->audioSystem = nullptr;
-    renderer->vtable->destroy(renderer);
-
-#ifdef USE_GLFW2
-    glfwCloseWindow();
-#else
-    glfwDestroyWindow(window);
-#endif
-    glfwTerminate();
-
-    Runner_free(runner);
-    OverlayFileSystem_destroy(overlayFs);
+        Runner_free(runner);
+        OverlayFileSystem_destroy(overlayFs);
 #ifdef ENABLE_VM_OPCODE_PROFILER
-    VM_printOpcodeProfilerReport(vm);
+        VM_printOpcodeProfilerReport(vm);
 #endif
-    VM_free(vm);
-    DataWin_free(dataWin);
+        VM_free(vm);
+        DataWin_free(dataWin);
 
-    freeCommandLineArgs(&args);
+        if (actuallyShuttingDown) {
+            freeCommandLineArgs(&args);
+            free(currentDataWinPath);
+            repeat(arrlen(currentGameArgs), i) {
+                free(currentGameArgs[i]);
+            }
+            arrfree(currentGameArgs);
+            printf("Bye! :3\n");
+            return 0;
+        }
 
-    printf("Bye! :3\n");
-    return 0;
+        // game_change was called, so we need to restart the runner with the new data.win and launch parameters
+        if (nextWorkingDirectory != nullptr && nextLaunchParameters != nullptr) {
+            char** newArguments = nullptr;
+            newArguments = extractRunnerArguments(nextLaunchParameters);
+
+            // Extract the data.win filename from "-game <file>" inside the new launch parameters
+            char* dataWinFilename = nullptr;
+            {
+                // After extraction, we now need to figure out where is the "-game" argument
+                size_t length = arrlen(newArguments);
+                repeat(length, i) {
+                    if (strcmp(newArguments[i], "-game") == 0) {
+                        // So we already know that the data.win file will be the NEXT one
+                        if (length - 1 == i)
+                            break; // Where's the value?? Bailing...
+
+                        dataWinFilename = safeStrdup(newArguments[i + 1]);
+                        break;
+                    }
+                }
+            }
+
+            if (dataWinFilename == nullptr) {
+                fprintf(stderr, "Runner: Launch parameters '%s' did not contain a '-game <file>' entry! Shutting down...\n", nextLaunchParameters);
+                free(nextWorkingDirectory);
+                free(nextLaunchParameters);
+                freeCommandLineArgs(&args);
+                free(currentDataWinPath);
+                repeat(arrlen(newArguments), i) {
+                    free(newArguments[i]);
+                }
+                arrfree(newArguments);
+                repeat(arrlen(currentGameArgs), i) {
+                    free(currentGameArgs[i]);
+                }
+                arrfree(currentGameArgs);
+                return 1;
+            }
+
+            // Get the parent directory of the main data.win file
+            char* parentDir = safeStrdup(currentDataWinPath);
+            {
+                char* lastSlash = strrchr(parentDir, '/');
+                char* lastBackslash = strrchr(parentDir, '\\');
+                char* sep = (lastSlash > lastBackslash) ? lastSlash : lastBackslash;
+                if (sep != nullptr) {
+                    *sep = '\0';
+                } else {
+                    parentDir[0] = '.';
+                    parentDir[1] = '\0';
+                }
+            }
+
+            // The pendingWorkingDirectory contains a slash at the beginning of it (example: /chapter3)
+            // The parentDir does NOT have a trailing slash, so we don't need to bother with it
+            size_t newPathLen = strlen(parentDir) + strlen(nextWorkingDirectory) + 1 + strlen(dataWinFilename) + 1;
+            char* newPath = safeMalloc(newPathLen);
+            snprintf(newPath, newPathLen, "%s%s/%s", parentDir, nextWorkingDirectory, dataWinFilename);
+
+            free(parentDir);
+            free(currentDataWinPath);
+            currentDataWinPath = newPath;
+            args.dataWinPath = currentDataWinPath;
+
+            // Rebuild the gameArgs
+            // First, we'll remove ALL args except the first one (which is the argv[0])
+            while (arrlen(currentGameArgs) > 1) {
+                free(currentGameArgs[1]);
+                arrdel(currentGameArgs, 1);
+            }
+
+            repeat(arrlen(newArguments), i) {
+                arrput(currentGameArgs, newArguments[i]);
+            }
+
+            free(dataWinFilename);
+            free(nextWorkingDirectory);
+            free(nextLaunchParameters);
+            arrfree(newArguments);
+        }
+
+        printf("Bye! :3\n");
+    }
 }
