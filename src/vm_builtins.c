@@ -3297,6 +3297,20 @@ static RValue builtin_os_get_region(MAYBE_UNUSED VMContext* ctx, MAYBE_UNUSED RV
 
 STUB_RETURN_FALSE(os_is_paused);
 
+static RValue builtin_environment_get_variable(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
+    char* name = RValue_toString(args[0]);
+    if (name == nullptr) return RValue_makeOwnedString(safeStrdup(""));
+
+    const char* value = getenv(name);
+    free(name);
+
+    if (value == nullptr) {
+        return RValue_makeOwnedString(safeStrdup(""));
+    }
+
+    return RValue_makeOwnedString(safeStrdup(value));
+}
+
 // ===[ DS_MAP BUILTIN FUNCTIONS ]===
 
 static inline ptrdiff_t getValueIndexInMap(DsMapEntry** mapPtr, RValue keyRvalue) {
@@ -11880,6 +11894,7 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "os_get_language", builtin_os_get_language);
     VM_registerBuiltin(ctx, "os_get_region", builtin_os_get_region);
     VM_registerBuiltin(ctx, "os_is_paused", builtin_os_is_paused);
+    VM_registerBuiltin(ctx, "environment_get_variable", builtin_environment_get_variable);
 
     // ds_map
     VM_registerBuiltin(ctx, "ds_map_create", builtin_ds_map_create);
