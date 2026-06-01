@@ -52,6 +52,7 @@
 #define OTHER_END_OF_PATH    8
 #define OTHER_NO_MORE_HEALTH 9
 #define OTHER_USER0          10
+#define OTHER_ASYNC_DIALOG   63
 #define OTHER_ASYNC_SYSTEM   75
 
 #define MAX_VIEWS 8
@@ -453,6 +454,11 @@ struct Runner {
 
     // Async map ID
     int32_t asyncLoadMapId;
+
+    // Pending Xbox One account-picker async result.
+    int32_t xboxAccountPickerPendingId; // -1 when nothing is pending
+    int32_t xboxAccountPickerPadIndex; // pad index reported back in the async map
+    int32_t xboxAsyncIdCounter; // hands out a unique async id per picker call
 
     // Legacy GMS 1.x globals
     GMLReal score;

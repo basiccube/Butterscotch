@@ -1517,6 +1517,9 @@ void Runner_reset(Runner* runner) {
 
     runner->pendingRoom = -1;
     runner->asyncLoadMapId = -1;
+    runner->xboxAccountPickerPendingId = -1;
+    runner->xboxAccountPickerPadIndex = 0;
+    runner->xboxAsyncIdCounter = 1;
     runner->score = 0.0;
     runner->lives = -1.0;
     runner->health = 0.0;
@@ -2927,6 +2930,34 @@ void Runner_step(Runner* runner) {
             }
             runner->asyncLoadMapId = -1;
         }
+    }
+
+    // Resolve a pending Xbox One account-picker request
+    if (runner->xboxAccountPickerPendingId >= 0) {
+        DsMapEntry* map = nullptr;
+        arrput(runner->dsMapPool, map);
+        int32_t mapId = arrlen(runner->dsMapPool) - 1;
+
+        DsMapEntry** mapPtr = &runner->dsMapPool[mapId];
+        shput(*mapPtr, safeStrdup("id"), RValue_makeReal((GMLReal) runner->xboxAccountPickerPendingId));
+        shput(*mapPtr, safeStrdup("user"), RValue_makeReal(1.0));
+        shput(*mapPtr, safeStrdup("pad_index"), RValue_makeReal((GMLReal) runner->xboxAccountPickerPadIndex));
+
+        runner->asyncLoadMapId = mapId;
+        runner->xboxAccountPickerPendingId = -1;
+        Runner_executeEventForAll(runner, EVENT_OTHER, OTHER_ASYNC_DIALOG);
+
+        // Clean up ds_map
+        mapPtr = &runner->dsMapPool[mapId];
+        if (*mapPtr != nullptr) {
+            repeat(shlen(*mapPtr), j) {
+                free((*mapPtr)[j].key);
+                RValue_free(&(*mapPtr)[j].value);
+            }
+            shfree(*mapPtr);
+            *mapPtr = nullptr;
+        }
+        runner->asyncLoadMapId = -1;
     }
 
     // Dispatch collision events

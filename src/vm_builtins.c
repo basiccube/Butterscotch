@@ -3338,6 +3338,25 @@ static RValue builtin_os_get_region(MAYBE_UNUSED VMContext* ctx, MAYBE_UNUSED RV
 
 STUB_RETURN_FALSE(os_is_paused);
 
+// ===[ XBOX ONE FUNCTIONS ]===
+
+// xboxone_show_account_picker(pad_index, flags): shows the Xbox account picker (async).
+static RValue builtin_xboxone_show_account_picker(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
+    Runner* runner = ctx->runner;
+    int32_t asyncId = runner->xboxAsyncIdCounter++;
+    runner->xboxAccountPickerPendingId = asyncId;
+    runner->xboxAccountPickerPadIndex = (argCount > 0) ? (int32_t) RValue_toReal(args[0]) : 0;
+    return RValue_makeReal((GMLReal) asyncId);
+}
+
+STUB_RETURN_TRUE(xboxone_user_is_signed_in);
+STUB_RETURN_FALSE(xboxone_is_suspending);
+STUB_RETURN_FALSE(xboxone_is_constrained);
+STUB_RETURN_ZERO(xboxone_suspend);
+STUB_RETURN_ZERO(xboxone_set_savedata_user);
+STUB_RETURN_ZERO(xboxone_stats_add_user);
+STUB_RETURN_ZERO(xboxone_achievements_set_progress);
+
 static RValue builtin_environment_get_variable(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
     char* name = RValue_toString(args[0]);
     if (name == nullptr) return RValue_makeOwnedString(safeStrdup(""));
@@ -12162,6 +12181,16 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "os_get_language", builtin_os_get_language);
     VM_registerBuiltin(ctx, "os_get_region", builtin_os_get_region);
     VM_registerBuiltin(ctx, "os_is_paused", builtin_os_is_paused);
+
+    // Xbox One
+    VM_registerBuiltin(ctx, "xboxone_show_account_picker", builtin_xboxone_show_account_picker);
+    VM_registerBuiltin(ctx, "xboxone_user_is_signed_in", builtin_xboxone_user_is_signed_in);
+    VM_registerBuiltin(ctx, "xboxone_is_suspending", builtin_xboxone_is_suspending);
+    VM_registerBuiltin(ctx, "xboxone_is_constrained", builtin_xboxone_is_constrained);
+    VM_registerBuiltin(ctx, "xboxone_suspend", builtin_xboxone_suspend);
+    VM_registerBuiltin(ctx, "xboxone_set_savedata_user", builtin_xboxone_set_savedata_user);
+    VM_registerBuiltin(ctx, "xboxone_stats_add_user", builtin_xboxone_stats_add_user);
+    VM_registerBuiltin(ctx, "xboxone_achievements_set_progress", builtin_xboxone_achievements_set_progress);
     VM_registerBuiltin(ctx, "environment_get_variable", builtin_environment_get_variable);
 
     // ds_map
