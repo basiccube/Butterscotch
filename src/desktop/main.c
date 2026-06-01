@@ -1448,10 +1448,8 @@ int main(int argc, char* argv[]) {
                 double targetFrameTime = 1.0 / (runner->currentRoom->speed * effectiveSpeed);
                 double nextFrameTime = lastFrameTime + targetFrameTime;
                 platformSleepUntil(nextFrameTime);
-                lastFrameTime = nextFrameTime;
-            } else {
-                lastFrameTime = platformGetTime();
             }
+            lastFrameTime = platformGetTime();
         }
 
         saveInputRecording();

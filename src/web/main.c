@@ -177,10 +177,8 @@ void* loop() {
             while (emscripten_get_now() < nextFrameTimeMs) {
                 // Spin-wait for the remaining sub-millisecond
             }
-            lastFrameTimeMs = nextFrameTimeMs;
-        } else {
-            lastFrameTimeMs = emscripten_get_now();
         }
+        lastFrameTimeMs = emscripten_get_now();
     }
 
     // Cleanup
