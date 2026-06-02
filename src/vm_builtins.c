@@ -3484,7 +3484,7 @@ static RValue builtin_ds_map_add(VMContext* ctx, RValue* args, int32_t argCount)
     return RValue_makeUndefined();
 }
 
-static RValue builtin_ds_map_set(VMContext* ctx, RValue* args, int32_t argCount) {
+static RValue dsMapSetCommon(VMContext* ctx, RValue* args, int32_t argCount, bool returnPassedValue, bool returnCurrentOrNewValue) {
     if (3 > argCount) return RValue_makeUndefined();
     Runner* runner = ctx->runner;
     int32_t id = RValue_toInt32(args[0]);
@@ -3495,9 +3495,19 @@ static RValue builtin_ds_map_set(VMContext* ctx, RValue* args, int32_t argCount)
 
     ptrdiff_t existingKeyIndex = shgeti(*mapPtr, key);
 
-    if (existingKeyIndex != -1) {
-        // If it already exists, we'll get the current value and free it
-        RValue_free(&(*mapPtr)[existingKeyIndex].value);
+    RValue ret;
+    if (returnCurrentOrNewValue) {
+        if (existingKeyIndex != -1) {
+            // We are going to steal the ownership :3
+            ret = (*mapPtr)[existingKeyIndex].value;
+        } else {
+            ret = RValue_makeIndependent(args[2]);
+        }
+    } else {
+        if (existingKeyIndex != -1) {
+            // If it already exists, we'll get the current value and free it
+            RValue_free(&(*mapPtr)[existingKeyIndex].value);
+        }
     }
 
     shput(*mapPtr, key, RValue_makeIndependent(args[2]));
@@ -3508,7 +3518,29 @@ static RValue builtin_ds_map_set(VMContext* ctx, RValue* args, int32_t argCount)
         free(key);
     }
 
-    return RValue_makeUndefined();
+    if (returnCurrentOrNewValue) {
+        return ret;
+    } else if (returnPassedValue) {
+        return RValue_makeIndependent(args[2]);
+    } else {
+        return RValue_makeUndefined();
+    }
+}
+
+static RValue builtin_ds_map_set(VMContext* ctx, RValue* args, int32_t argCount) {
+    return dsMapSetCommon(ctx, args, argCount, false, false);
+}
+
+// This is an undocumented ds_map function, see GameMaker-HTML5's ds_map.js
+// It is essentially the ds_map_set, but it returns the passed value
+static RValue builtin_ds_map_set_pre(VMContext* ctx, RValue* args, int32_t argCount) {
+    return dsMapSetCommon(ctx, args, argCount, true, false);
+}
+
+// This is an undocumented ds_map function, see GameMaker-HTML5's ds_map.js
+// It is essentially the ds_map_set but it returns the OLD value (i'm old!), if not it returns the new value
+static RValue builtin_ds_map_set_post(VMContext* ctx, RValue* args, int32_t argCount) {
+    return dsMapSetCommon(ctx, args, argCount, false, true);
 }
 
 static RValue builtin_ds_map_replace(VMContext* ctx, RValue* args, int32_t argCount) {
@@ -5339,7 +5371,7 @@ static RValue builtin_ini_read_string(VMContext* ctx, RValue* args, int32_t argC
 static RValue builtin_ini_read_real(VMContext* ctx, RValue* args, int32_t argCount) {
     Runner* runner = ctx->runner;
     if (3 > argCount) return RValue_makeReal(0.0);
-    
+
     if (runner->currentIni != nullptr) {
         const char* section = (args[0].type == RVALUE_STRING ? args[0].string : "");
         const char* key = (args[1].type == RVALUE_STRING ? args[1].string : "");
@@ -12714,6 +12746,8 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "ds_map_create", builtin_ds_map_create);
     VM_registerBuiltin(ctx, "ds_map_add", builtin_ds_map_add);
     VM_registerBuiltin(ctx, "ds_map_set", builtin_ds_map_set);
+    VM_registerBuiltin(ctx, "ds_map_set_pre", builtin_ds_map_set_pre);
+    VM_registerBuiltin(ctx, "ds_map_set_post", builtin_ds_map_set_post);
     VM_registerBuiltin(ctx, "ds_map_replace", builtin_ds_map_replace);
     VM_registerBuiltin(ctx, "ds_map_find_value", builtin_ds_map_find_value);
     VM_registerBuiltin(ctx, "ds_map_exists", builtin_ds_map_exists);
