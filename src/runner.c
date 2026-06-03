@@ -992,14 +992,6 @@ static void expandViewAxis(int32_t pos, int32_t size, int32_t surfaceSize, int32
     *outPos = center - *outSize / 2;
 }
 
-// Clamp the widened view back inside the room so the extra field-of-view only ever reveals more of the room.
-static int32_t clampExpandedView(int32_t pos, int32_t size, int32_t roomSize) {
-    if (size >= roomSize) return (roomSize - size) / 2; // room can't contain the widened view: center it (split the spill evenly)
-    if (0 > pos) return 0;
-    if (pos + size > roomSize) return roomSize - size;
-    return pos;
-}
-
 void Runner_drawViews(Runner* runner, int32_t gameW, int32_t gameH, float displayScaleX, float displayScaleY, bool debugShowCollisionMasks) {
     Renderer* renderer = runner->renderer;
     Room* activeRoom = runner->currentRoom;
@@ -1021,9 +1013,6 @@ void Runner_drawViews(Runner* runner, int32_t gameW, int32_t gameH, float displa
             int32_t viewX, viewY, viewW, viewH;
             expandViewAxis(camera->viewX, camera->viewWidth, gameW, widescreenBaseW, &viewX, &viewW);
             expandViewAxis(camera->viewY, camera->viewHeight, gameH, widescreenBaseH, &viewY, &viewH);
-            // Keep the widened view inside the room (only matters when the axis was actually grown by the widescreen hack).
-            if (runner->widescreenExtraWidth > 0) viewX = clampExpandedView(viewX, viewW, (int32_t) activeRoom->width);
-            if (runner->widescreenExtraHeight > 0) viewY = clampExpandedView(viewY, viewH, (int32_t) activeRoom->height);
             int32_t portX = (int32_t) ((float) view->portX * displayScaleX + 0.5f);
             int32_t portY = (int32_t) ((float) view->portY * displayScaleY + 0.5f);
             int32_t portW = (int32_t) ((float) view->portWidth * displayScaleX + 0.5f);
@@ -2400,8 +2389,6 @@ void Runner_getMouseRoomPosition(Runner* runner, GMLReal* outX, GMLReal* outY) {
         int32_t viewX, viewY, viewW, viewH;
         expandViewAxis(pickedCamera->viewX, pickedCamera->viewWidth, gameW, widescreenBaseW, &viewX, &viewW);
         expandViewAxis(pickedCamera->viewY, pickedCamera->viewHeight, gameH, widescreenBaseH, &viewY, &viewH);
-        if (runner->widescreenExtraWidth > 0) viewX = clampExpandedView(viewX, viewW, (int32_t) runner->currentRoom->width);
-        if (runner->widescreenExtraHeight > 0) viewY = clampExpandedView(viewY, viewH, (int32_t) runner->currentRoom->height);
 
         // Scale the picked view's port into FBO space exactly as Runner_drawViews does.
         int32_t portX = (int32_t) ((float) pickedView->portX * displayScaleX + 0.5f);
