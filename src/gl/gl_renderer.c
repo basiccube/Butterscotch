@@ -220,12 +220,20 @@ static void glInit(Renderer* renderer, DataWin* dataWin) {
     //yeah find the way to get the shaders here!!!
     gl->gmlShaderCompiled = safeMalloc(dataWin->shdr.count * sizeof(bool));
     fprintf(stderr, "GL: %u Shaders Found\n", dataWin->shdr.count);
-    for (uint32_t i = 0; dataWin->shdr.count > i; i++) {
+    repeat(dataWin->shdr.count, i) {
         Shader* shdr = &dataWin->shdr.shaders[i];
-        fprintf(stderr, "GL: Compiling %s Vertex Shader\n", shdr->name); 
+        fprintf(stderr, "GL: Compiling %s Vertex Shader\n", shdr->name);
+#ifdef ENABLE_GLES
+        GLuint vertShaderT = compileShader(GL_VERTEX_SHADER, shdr->glslES_Vertex);
+#else
         GLuint vertShaderT = compileShader(GL_VERTEX_SHADER, shdr->glsl_Vertex);
-        fprintf(stderr, "GL: Compiling %s Fragment Shader\n", shdr->name); 
+#endif
+        fprintf(stderr, "GL: Compiling %s Fragment Shader\n", shdr->name);
+#ifdef ENABLE_GLES
+        GLuint fragShaderT = compileShader(GL_FRAGMENT_SHADER, shdr->glslES_Fragment);
+#else
         GLuint fragShaderT = compileShader(GL_FRAGMENT_SHADER, shdr->glsl_Fragment);
+#endif
         gl->gmlShaderCount++;
         gl->gmlShaders = safeRealloc(gl->gmlShaders, gl->gmlShaderCount * sizeof(GLuint));
         gl->sampler2DLookUpTable = safeRealloc(gl->sampler2DLookUpTable, gl->gmlShaderCount * sizeof(int32_t*));
