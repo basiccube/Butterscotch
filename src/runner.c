@@ -2849,13 +2849,25 @@ static void updateViews(Runner* runner) {
         GMLCamera* camera = Runner_getCameraForView(runner, (int32_t) vi);
         if (camera == nullptr || 0 > camera->objectId) continue;
 
-        // Find first active instance of the target object.
+        // Find the target view instance
         Instance* target = nullptr;
-        if (camera->objectId >= 0 && runner->dataWin->objt.count > (uint32_t) camera->objectId) {
-            Instance** bucket = runner->instancesByObject[camera->objectId];
+        int32_t targetId = camera->objectId;
+
+        if (targetId >= 100000) {
+            // It's an instance ID - look it up directly
+            target = hmget(runner->instancesById, targetId);
+            if (target != nullptr && (!target->active || target->destroyed)) {
+                target = nullptr;
+            }
+        } else if (targetId >= 0 && runner->dataWin->objt.count > (uint32_t) targetId) {
+            // It's an object index - find first active instance of that object
+            Instance** bucket = runner->instancesByObject[targetId];
             int32_t bucketCount = (int32_t) arrlen(bucket);
             repeat(bucketCount, i) {
-                if (bucket[i]->active) { target = bucket[i]; break; }
+                if (bucket[i]->active && !bucket[i]->destroyed) {
+                    target = bucket[i];
+                    break;
+                }
             }
         }
 
