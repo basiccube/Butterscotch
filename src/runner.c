@@ -1821,6 +1821,19 @@ static void validateRendererVtable(Renderer* renderer) {
     requireNotNullFunction(surfaceFree);
     requireNotNullFunction(surfaceCopy);
     requireNotNullFunction(surfaceGetPixels);
+    requireNotNullFunction(spriteGetTexture);
+    requireNotNullFunction(textureGetTexelWidth);
+    requireNotNullFunction(textureGetTexelHeight);
+    requireNotNullFunction(textureGetUVs);
+    requireNotNullFunction(textureSetStage);
+    requireNotNullFunction(gpuSetShader);
+    requireNotNullFunction(gpuResetShader);
+    requireNotNullFunction(shaderGetUniform);
+    requireNotNullFunction(shaderGetSamplerIndex);
+    requireNotNullFunction(shaderSetUniformF);
+    requireNotNullFunction(shaderSetUniformI);
+    requireNotNullFunction(shaderIsCompiled);
+    requireNotNullFunction(shadersSupported);
     #undef requireNotNullFunction
 }
 
