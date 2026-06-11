@@ -3094,6 +3094,16 @@ static RValue builtin_view_get_hport(VMContext* ctx, RValue* args, int32_t argCo
     return RValue_makeReal(-1);
 }
 
+static RValue builtin_view_get_surface_id(VMContext* ctx, RValue* args, int32_t argCount) {
+    if (1 > argCount) return RValue_makeReal(-1);
+    Runner* runner = ctx->runner;
+    int32_t viewIndex = RValue_toInt32(args[0]);
+    if (viewIndex >= 0 && MAX_VIEWS > viewIndex) {
+        return RValue_makeReal(runner->viewSurfaceIds[viewIndex]);
+    }
+    return RValue_makeReal(-1);
+}
+
 static RValue builtin_view_set_visible(VMContext* ctx, RValue* args, int32_t argCount) {
     if (2 > argCount) return RValue_makeUndefined();
     Runner* runner = ctx->runner;
@@ -3140,6 +3150,16 @@ static RValue builtin_view_set_hport(VMContext* ctx, RValue* args, int32_t argCo
     int32_t viewIndex = RValue_toInt32(args[0]);
     if (viewIndex >= 0 && MAX_VIEWS > viewIndex) {
         runner->views[viewIndex].portHeight = RValue_toInt32(args[1]);
+    }
+    return RValue_makeUndefined();
+}
+
+static RValue builtin_view_set_surface_id(VMContext* ctx, RValue* args, int32_t argCount) {
+    if (2 > argCount) return RValue_makeUndefined();
+    Runner* runner = ctx->runner;
+    int32_t viewIndex = RValue_toInt32(args[0]);
+    if (viewIndex >= 0 && MAX_VIEWS > viewIndex) {
+        runner->viewSurfaceIds[viewIndex] = RValue_toInt32(args[1]);
     }
     return RValue_makeUndefined();
 }
@@ -13577,11 +13597,13 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "view_get_yport", builtin_view_get_yport);
     VM_registerBuiltin(ctx, "view_get_wport", builtin_view_get_wport);
     VM_registerBuiltin(ctx, "view_get_hport", builtin_view_get_hport);
+    VM_registerBuiltin(ctx, "view_get_surface_id", builtin_view_get_surface_id);
     VM_registerBuiltin(ctx, "view_set_visible", builtin_view_set_visible);
     VM_registerBuiltin(ctx, "view_set_xport", builtin_view_set_xport);
     VM_registerBuiltin(ctx, "view_set_yport", builtin_view_set_yport);
     VM_registerBuiltin(ctx, "view_set_wport", builtin_view_set_wport);
     VM_registerBuiltin(ctx, "view_set_hport", builtin_view_set_hport);
+    VM_registerBuiltin(ctx, "view_set_surface_id", builtin_view_set_surface_id);
     VM_registerBuiltin(ctx, "camera_get_view_x", builtin_camera_get_view_x);
     VM_registerBuiltin(ctx, "camera_get_view_y", builtin_camera_get_view_y);
     VM_registerBuiltin(ctx, "camera_get_view_width", builtin_camera_get_view_width);
