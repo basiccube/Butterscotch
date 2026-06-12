@@ -258,32 +258,6 @@ static RValue VM_arrayReadAt(RValue* slot, int32_t index) {
     return result;
 }
 
-// Copies "val" into *slot: dup string buffers, incRef arrays. Caller retains "val".
-static void storeIntoArraySlot(RValue* slot, RValue val) {
-    // Free whatever was there (decRefs owned arrays, frees owned strings).
-    RValue_free(slot);
-    if (val.type == RVALUE_STRING && val.string != nullptr) {
-        *slot = RValue_makeOwnedString(safeStrdup(val.string));
-    } else if (val.type == RVALUE_ARRAY && val.array != nullptr) {
-        GMLArray_incRef(val.array);
-        val.ownsReference = true;
-        *slot = val;
-#if IS_WAD17_OR_HIGHER_ENABLED
-    } else if (val.type == RVALUE_METHOD && val.method != nullptr) {
-        GMLMethod_incRef(val.method);
-        val.ownsReference = true;
-        *slot = val;
-#endif
-    } else if (val.type == RVALUE_STRUCT && val.structInst != nullptr) {
-        Instance_structIncRef(val.structInst);
-        val.ownsReference = true;
-        *slot = val;
-    } else {
-        val.ownsReference = false;
-        *slot = val;
-    }
-}
-
 // CoW fork for array writes (BC17+): when the slot's array is owned by a different scope, replace it with a uniquely-owned clone stamped with the current owner,
 // so the upcoming store (Pop for one dimensional arrays, or the chain's eventual BREAK_POPAF for multi-dimensional arrays) can write in place.
 // Essentially "If we don't own this array, copy it and decrease the reference count of the original array".
@@ -318,7 +292,7 @@ static GMLArray* VM_arrayWriteAt(VMContext* ctx, RValue* slot, int32_t index, RV
         fresh->owner = intendedOwner;
         *slot = RValue_makeArray(fresh);
         GMLArray_growTo(fresh, index + 1);
-        storeIntoArraySlot(GMLArray_slot(fresh, index), val);
+        GMLArray_set(fresh, index, val);
         return fresh;
     }
 
@@ -339,27 +313,9 @@ static GMLArray* VM_arrayWriteAt(VMContext* ctx, RValue* slot, int32_t index, RV
         arr->owner = intendedOwner;
     }
 
-    // Case 3: grow if needed, then write.
-    GMLArray_growTo(arr, index + 1);
-    storeIntoArraySlot(GMLArray_slot(arr, index), val);
+    // Case 3: Write!
+    GMLArray_set(arr, index, val);
     return arr;
-}
-
-// Public entry point for builtins that materialise an array and return it (layer_get_all).
-// Returned RValue holds one strong ref, caller is expected to consume it (stack push / variable write).
-// Owner is left null, the first write through a variable slot will claim it.
-RValue VM_createArray(MAYBE_UNUSED VMContext* ctx) {
-    GMLArray* arr = GMLArray_create(0);
-    return RValue_makeArray(arr);
-}
-
-// Public helper for builtins that populate an array being returned. Copies val, caller retains ownership.
-// The arrayRef must be an RVALUE_ARRAY (as returned by VM_createArray). No CoW fork, the returning array has refCount=1 and no scope owner yet, so we write in place.
-void VM_arraySet(MAYBE_UNUSED VMContext* ctx, RValue* arrayRef, int32_t index, RValue val) {
-    require(arrayRef != nullptr && arrayRef->type == RVALUE_ARRAY && arrayRef->array != nullptr);
-    GMLArray* arr = arrayRef->array;
-    GMLArray_growTo(arr, index + 1);
-    storeIntoArraySlot(GMLArray_slot(arr, index), val);
 }
 
 // Creates a copy of "name"
@@ -2778,8 +2734,7 @@ static void handleBreakPopAF(VMContext* ctx) {
     if (arrayRef.type == RVALUE_ARRAY && arrayRef.array != nullptr && idx >= 0) {
         GMLArray* arr = arrayRef.array;
         requireMessageFormatted(__FILE__, __LINE__, arr->refCount == 1 || arr->owner == ctx->currentArrayOwner, "BREAK_POPAF: Writing through shared/aliased array without prior CoW fork in %s: arr=%p refCount=%d owner=%p currentArrayOwner=%p idx=%d", ctx->currentCodeName, (void*) arr, arr->refCount, arr->owner, ctx->currentArrayOwner, idx);
-        GMLArray_growTo(arr, idx + 1);
-        storeIntoArraySlot(GMLArray_slot(arr, idx), value);
+        GMLArray_set(arr, idx, value);
     }
     RValue_free(&arrayRef);
     RValue_free(&value);

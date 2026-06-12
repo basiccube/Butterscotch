@@ -12021,11 +12021,11 @@ static RValue builtin_layer_tile_get_region(VMContext* ctx, RValue* args, MAYBE_
     RoomTile* tile = findTileElement(ctx->runner, args[0]);
     if (tile == nullptr)
         return RValue_makeReal(-1.0);
-    RValue arr = VM_createArray(ctx);
-    VM_arraySet(ctx, &arr, 0, RValue_makeReal((GMLReal) tile->sourceX));
-    VM_arraySet(ctx, &arr, 1, RValue_makeReal((GMLReal) tile->sourceY));
-    VM_arraySet(ctx, &arr, 2, RValue_makeReal((GMLReal) tile->width));
-    VM_arraySet(ctx, &arr, 3, RValue_makeReal((GMLReal) tile->height));
+    RValue arr = RValue_makeArray(GMLArray_create(4));
+    GMLArray_setOnArrayRef(&arr, 0, RValue_makeReal((GMLReal) tile->sourceX));
+    GMLArray_setOnArrayRef(&arr, 1, RValue_makeReal((GMLReal) tile->sourceY));
+    GMLArray_setOnArrayRef(&arr, 2, RValue_makeReal((GMLReal) tile->width));
+    GMLArray_setOnArrayRef(&arr, 3, RValue_makeReal((GMLReal) tile->height));
     return arr;
 }
 
@@ -12034,12 +12034,11 @@ static RValue builtin_layer_get_all_elements(VMContext* ctx, RValue* args, MAYBE
     Runner* runner = ctx->runner;
     int32_t id = resolveLayerIdArg(runner, args[0]);
 
-    RValue arr = VM_createArray(ctx);
+    RValue arr = RValue_makeArray(GMLArray_create(0));
     RuntimeLayer* runtimeLayer = Runner_findRuntimeLayerById(runner, id);
     if (runtimeLayer == nullptr)
         return arr;
 
-    int32_t i = 0;
     size_t count = arrlenu(runtimeLayer->elements);
     repeat(count, elementIndex) {
         RuntimeLayerElement* el = &runtimeLayer->elements[elementIndex];
@@ -12048,7 +12047,7 @@ static RValue builtin_layer_get_all_elements(VMContext* ctx, RValue* args, MAYBE
             Instance* elInst = hmget(runner->instancesById, el->instanceId);
             if (elInst == nullptr || elInst->destroyed) continue;
         }
-        VM_arraySet(ctx, &arr, i++, RValue_makeReal((GMLReal) el->id));
+        GMLArray_addOnArrayRef(&arr, RValue_makeReal((GMLReal) el->id));
     }
     return arr;
 }
@@ -12417,11 +12416,10 @@ static RValue builtin_tile_set_empty(MAYBE_UNUSED VMContext* ctx, RValue* args, 
 
 static RValue builtin_layer_get_all(VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
     Runner* runner = ctx->runner;
-    RValue arr = VM_createArray(ctx);
-    int32_t i = 0;
     size_t count = arrlenu(runner->runtimeLayers);
+    RValue arr = RValue_makeArray(GMLArray_create((int32_t) count));
     repeat(count, layerIndex) {
-        VM_arraySet(ctx, &arr, i++, RValue_makeReal((GMLReal) runner->runtimeLayers[layerIndex].id));
+        GMLArray_setOnArrayRef(&arr, layerIndex, RValue_makeReal((GMLReal) runner->runtimeLayers[layerIndex].id));
     }
     return arr;
 }
@@ -12429,17 +12427,18 @@ static RValue builtin_layer_get_all(VMContext* ctx, MAYBE_UNUSED RValue* args, M
 static RValue builtin_layer_get_id_at_depth(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
     Runner* runner = ctx->runner;
     int32_t targetDepth = RValue_toInt32(args[0]);
-    RValue arr = VM_createArray(ctx);
-    int32_t i = 0;
+    RValue arr = RValue_makeArray(GMLArray_create(0));
     size_t count = arrlenu(runner->runtimeLayers);
+    bool found = false;
     repeat(count, layerIndex) {
         if (runner->runtimeLayers[layerIndex].depth == targetDepth) {
-            VM_arraySet(ctx, &arr, i++, RValue_makeReal((GMLReal) runner->runtimeLayers[layerIndex].id));
+            GMLArray_addOnArrayRef(&arr, RValue_makeReal((GMLReal) runner->runtimeLayers[layerIndex].id));
+            found = true;
         }
     }
     // When no layer matches, return [-1] instead of an empty array.
-    if (i == 0)
-        VM_arraySet(ctx, &arr, 0, RValue_makeReal(-1.0));
+    if (!found)
+        GMLArray_setOnArrayRef(&arr, 0, RValue_makeReal(-1.0));
     return arr;
 }
 #endif
@@ -12458,9 +12457,9 @@ static RValue builtin_layer_vspeed(VMContext* ctx, RValue* args, MAYBE_UNUSED in
 // @@NewGMLArray@@ - GMS2 internal function to create a new array literal (e.g. `[1, 2, 3]`).
 // Allocates a fresh GMLArray populated with the argument values.
 static RValue builtin_NewGMLArray(VMContext* ctx, RValue* args, int32_t argCount) {
-    RValue arr = VM_createArray(ctx);
+    RValue arr = RValue_makeArray(GMLArray_create(argCount));
     repeat(argCount, i) {
-        VM_arraySet(ctx, &arr, i, args[i]);
+        GMLArray_setOnArrayRef(&arr, i, args[i]);
     }
     return arr;
 }
@@ -12468,10 +12467,10 @@ static RValue builtin_NewGMLArray(VMContext* ctx, RValue* args, int32_t argCount
 // array_create - GMS2 internal function to create a new array.
 // Allocates a fresh GMLArray populated with the argument values.
 static RValue builtin_array_create(VMContext* ctx, RValue* args, int32_t argCount) {
-    RValue arr = VM_createArray(ctx);
+    RValue arr = RValue_makeArray(GMLArray_create(0));
     RValue fill = (argCount > 1) ? args[1] : RValue_makeUndefined();
     repeat(RValue_toReal(args[0]), i) {
-        VM_arraySet(ctx, &arr, i, fill);
+        GMLArray_setOnArrayRef(&arr, i, fill);
     }
     return arr;
 }

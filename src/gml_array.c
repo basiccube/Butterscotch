@@ -117,3 +117,18 @@ void GMLArray_growTo(GMLArray* arr, int32_t minLength) {
     growRow(&arr->rows[row], col + 1);
 }
 
+// Copies "val" into *slot: dup string buffers, incRef arrays. Caller retains "val".
+static void storeIntoArraySlot(RValue* slot, RValue val) {
+    // Free whatever was there.
+    RValue_free(slot);
+    *slot = RValue_makeIndependent(val);
+}
+
+void GMLArray_set(GMLArray* arr, int32_t index, RValue val) {
+    GMLArray_growTo(arr, index + 1);
+    storeIntoArraySlot(GMLArray_slot(arr, index), val);
+}
+
+void GMLArray_add(GMLArray* arr, RValue val) {
+    GMLArray_set(arr, GMLArray_length1D(arr), val);
+}

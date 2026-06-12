@@ -31,6 +31,7 @@ struct GMLArray {
     GMLArrayRow* rows;
 };
 
+// Creates a GMLArray filled with "initialLength" RValue_makeReal(0.0).
 GMLArray* GMLArray_create(int32_t initialLength);
 void GMLArray_incRef(GMLArray* arr);
 // Decrement refCount. If it reaches 0, free all inner RValues + row buffers + struct. Safe on nullptr.
@@ -40,6 +41,20 @@ void GMLArray_decRef(GMLArray* arr);
 GMLArray* GMLArray_clone(GMLArray* src, void* newOwner);
 // Ensure flat index (minLength - 1) is writable: grow row (idx / STRIDE) to at least (col + 1) entries, filling gaps with RVALUE_UNDEFINED.
 void GMLArray_growTo(GMLArray* arr, int32_t minLength);
+// Sets "index" on the "array" to an independent copy of "val".
+void GMLArray_set(GMLArray* array, int32_t index, RValue val);
+// Sets "index" on the RValue "arrayRef" array reference to an independent copy of "val".
+static inline void GMLArray_setOnArrayRef(RValue* arrayRef, int32_t index, RValue val) {
+    require(arrayRef != nullptr && arrayRef->type == RVALUE_ARRAY && arrayRef->array != nullptr);
+    GMLArray_set(arrayRef->array, index, val);
+}
+// Appends "val" as an independent copy to the "array".
+void GMLArray_add(GMLArray* array, RValue val);
+// Appends "val" as an independent copy on the RValue "arrayRef" array reference.
+static inline void GMLArray_addOnArrayRef(RValue* arrayRef, RValue val) {
+    require(arrayRef != nullptr && arrayRef->type == RVALUE_ARRAY && arrayRef->array != nullptr);
+    GMLArray_add(arrayRef->array, val);
+}
 
 // Pointer to the slot at flat index, or nullptr if out of range. Call GMLArray_growTo first if writing.
 
