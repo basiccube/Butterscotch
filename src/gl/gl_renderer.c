@@ -608,6 +608,18 @@ static void glBeginGUI(Renderer* renderer, int32_t guiW, int32_t guiH, int32_t p
     glBindVertexArray(gl->vao);
 }
 
+static void glSetGuiProjection(Renderer* renderer, int32_t guiW, int32_t guiH, int32_t portW, int32_t portH, bool renderingToUserSurface) {
+    GLRenderer* gl = (GLRenderer*) renderer;
+    flushBatch(gl);
+    Matrix4f projection;
+    Matrix4f_guiProjection(&projection, (float) guiW, (float) guiH, (float) portW, (float) portH);
+    // GL surfaces are stored bottom-up and draw_surface samples them with vertical flip.
+    // Flip the projection when we are rendering to a user surface so it comes back upright.
+    if (renderingToUserSurface) Matrix4f_flipClipY(&projection);
+    renderer->gmlMatrices[MATRIX_WORLD_VIEW_PROJECTION] = projection;
+    glShaderSettingsRefresh(renderer);
+}
+
 static void glEndGUI(Renderer* renderer) {
     GLRenderer* gl = (GLRenderer*) renderer;
     flushBatch(gl);
@@ -2194,6 +2206,7 @@ Renderer* GLRenderer_create(void) {
     glVtable.endView = glEndView;
     glVtable.applyProjection = glApplyProjection;
     glVtable.beginGUI = glBeginGUI;
+    glVtable.setGuiProjection = glSetGuiProjection;
     glVtable.endGUI = glEndGUI;
     glVtable.drawSprite = glDrawSprite;
     glVtable.drawSpritePos = glDrawSpritePos;

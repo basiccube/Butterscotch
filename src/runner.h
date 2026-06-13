@@ -668,6 +668,10 @@ void Runner_popInstanceSnapshot(Runner* runner, int32_t base);
 // Push the surfaceID onto the runner's surface stack and bind it as the active render target.
 // Returns false if the stack is full.
 bool Runner_surfaceSetTarget(Runner* runner, int32_t surfaceID);
+// Tracks when the GUI size has changed.
+// When we are NOT in a GUI pass, we do nothing.
+// When we ARE in a GUI pass, we recalculate the GUI width and height and re-start with beginGUI to match the new dimensions.
+void Runner_guiSizeChanged(Runner* runner);
 // Pops the top of the surface stack and bind whatever is below (or the main framebuffer when the stack is empty).
 // Returns false when there was nothing to pop.
 bool Runner_surfaceResetTarget(Runner* runner);

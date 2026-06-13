@@ -1929,6 +1929,7 @@ static void validateRendererVtable(Renderer* renderer) {
     requireNotNullFunction(beginView);
     requireNotNullFunction(endView);
     requireNotNullFunction(beginGUI);
+    requireNotNullFunction(setGuiProjection);
     requireNotNullFunction(endGUI);
     requireNotNullFunction(drawSprite);
     requireNotNullFunction(drawSpritePart);
@@ -3719,6 +3720,17 @@ static int32_t findStackTop(Runner* runner) {
         if (runner->surfaceStack[i] != -1) return i;
     }
     return -1;
+}
+
+void Runner_guiSizeChanged(Runner* runner) {
+    if (!runner->inGuiPass || runner->renderer == nullptr) return;
+    int32_t guiW = runner->guiWidth > 0 ? runner->guiWidth : runner->guiPassPortW;
+    int32_t guiH = runner->guiHeight > 0 ? runner->guiHeight : runner->guiPassPortH;
+    runner->guiPassW = guiW;
+    runner->guiPassH = guiH;
+    int32_t top = findStackTop(runner);
+    bool renderingToUserSurface = (top != -1 && runner->surfaceStack[top] != runner->applicationSurfaceId);
+    runner->renderer->vtable->setGuiProjection(runner->renderer, guiW, guiH, runner->guiPassPortW, runner->guiPassPortH, renderingToUserSurface);
 }
 
 bool Runner_surfaceSetTarget(Runner* runner, int32_t surfaceID) {

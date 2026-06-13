@@ -9960,6 +9960,7 @@ static RValue builtin_display_set_gui_size(VMContext* ctx, RValue* args, int32_t
     int32_t h = RValue_toInt32(args[1]);
     runner->guiWidth = w > 0 ? w : 0;
     runner->guiHeight = h > 0 ? h : 0;
+    Runner_guiSizeChanged(runner);
     return RValue_makeUndefined();
 }
 
@@ -9968,6 +9969,7 @@ static RValue builtin_display_set_gui_maximise(VMContext* ctx, MAYBE_UNUSED RVal
     Runner* runner = ctx->runner;
     runner->guiWidth = 0;
     runner->guiHeight = 0;
+    Runner_guiSizeChanged(runner);
     return RValue_makeUndefined();
 }
 

@@ -1157,12 +1157,8 @@ static void gsApplyProjection(MAYBE_UNUSED Renderer* renderer, MAYBE_UNUSED cons
     // No-op
 }
 
-// targetSurfaceId is unused here because the renderer always draws to the screen buffer here
-static void gsBeginGUI(Renderer* renderer, int32_t guiW, int32_t guiH, MAYBE_UNUSED int32_t portX, MAYBE_UNUSED int32_t portY, MAYBE_UNUSED int32_t portW, MAYBE_UNUSED int32_t portH, MAYBE_UNUSED int32_t targetSurfaceId) {
+static void gsSetGuiProjection(Renderer* renderer, int32_t guiW, int32_t guiH, MAYBE_UNUSED int32_t portW, MAYBE_UNUSED int32_t portH, MAYBE_UNUSED bool renderingToUserSurface) {
     GsRenderer* gs = (GsRenderer*) renderer;
-    gs->viewX = 0;
-    gs->viewY = 0;
-
     if (guiW > 0 && guiH > 0) {
         gs->scaleX = 640.0f / (float) guiW;
         gs->scaleY = gs->scaleX;
@@ -1174,6 +1170,14 @@ static void gsBeginGUI(Renderer* renderer, int32_t guiW, int32_t guiH, MAYBE_UNU
     float renderedH = (float) guiH * gs->scaleY;
     gs->offsetX = 0.0f;
     gs->offsetY = (448.0f - renderedH) / 2.0f;
+}
+
+// targetSurfaceId is unused here because the renderer always draws to the screen buffer here
+static void gsBeginGUI(Renderer* renderer, int32_t guiW, int32_t guiH, MAYBE_UNUSED int32_t portX, MAYBE_UNUSED int32_t portY, MAYBE_UNUSED int32_t portW, MAYBE_UNUSED int32_t portH, MAYBE_UNUSED int32_t targetSurfaceId) {
+    GsRenderer* gs = (GsRenderer*) renderer;
+    gs->viewX = 0;
+    gs->viewY = 0;
+    gsSetGuiProjection(renderer, guiW, guiH, portW, portH, false);
 }
 
 static void gsEndGUI(MAYBE_UNUSED Renderer* renderer) {
@@ -3064,6 +3068,7 @@ Renderer* GsRenderer_create(GSGLOBAL* gsGlobal, int64_t eeAtlasCacheMiB) {
     gsVtable.endView = gsEndView;
     gsVtable.applyProjection = gsApplyProjection;
     gsVtable.beginGUI = gsBeginGUI;
+    gsVtable.setGuiProjection = gsSetGuiProjection;
     gsVtable.endGUI = gsEndGUI;
     gsVtable.drawSprite = gsDrawSprite;
     gsVtable.drawSpritePos = gsDrawSpritePos;

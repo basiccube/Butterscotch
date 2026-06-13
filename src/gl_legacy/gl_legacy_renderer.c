@@ -223,6 +223,18 @@ static void glBeginGUI(Renderer* renderer, int32_t guiW, int32_t guiH, int32_t p
     glActiveTexture(GL_TEXTURE0);
 }
 
+static void glSetGuiProjection(MAYBE_UNUSED Renderer* renderer, int32_t guiW, int32_t guiH, int32_t portW, int32_t portH, bool renderingToUserSurface) {
+    Matrix4f projection;
+    Matrix4f_guiProjection(&projection, (float) guiW, (float) guiH, (float) portW, (float) portH);
+    // GL surfaces are stored bottom-up and draw_surface samples them with vertical flip.
+    // Flip the projection when we are rendering to a user surface so it comes back upright.
+    if (renderingToUserSurface) Matrix4f_flipClipY(&projection);
+    glMatrixMode(GL_PROJECTION);
+    glLoadMatrixf(projection.m);
+    glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity();
+}
+
 static void glEndGUI(MAYBE_UNUSED Renderer* renderer) {
     glDisable(GL_SCISSOR_TEST);
 }
@@ -1683,6 +1695,7 @@ Renderer* GLLegacyRenderer_create(void) {
     glVtable.endView = glEndView;
     glVtable.applyProjection = glApplyProjection;
     glVtable.beginGUI = glBeginGUI;
+    glVtable.setGuiProjection = glSetGuiProjection;
     glVtable.endGUI = glEndGUI;
     glVtable.drawSprite = glDrawSprite;
     glVtable.drawSpritePos = glDrawSpritePos;
