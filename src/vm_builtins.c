@@ -14256,6 +14256,8 @@ static RValue fontAddSpriteImpl(VMContext* ctx, int32_t spriteIndex, uint16_t* c
     font->maxGlyphHeight = maxHeight;
     font->isSpriteFont = true;
     font->spriteIndex = spriteIndex;
+    // Precompute the per-glyph Y origin adjustment (the X half is baked into glyph->offset above).
+    font->spriteOriginYAdjust = spriteFontSubtractsOrigin ? (int16_t) sprite->originY : 0;
     Font_buildGlyphLUT(font);
 
     return RValue_makeReal((GMLReal) newFontIndex);

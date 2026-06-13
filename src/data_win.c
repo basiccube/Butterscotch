@@ -1205,6 +1205,7 @@ static void parseFONT(BinaryReader* reader, DataWin* dw) {
         }
         font->isSpriteFont = false;
         font->spriteIndex = -1;
+        font->spriteOriginYAdjust = 0;
 
         // Glyphs PointerList
         uint32_t glyphCount;

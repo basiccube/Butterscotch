@@ -1251,8 +1251,7 @@ static bool glResolveGlyph(GLRenderer* gl, DataWin* dw, GlFontState* state, Font
         // Sprite-font glyphs sit at the cell offset. GM 2023.2+ subtracts the sprite origin, pre-2023.2 it cancels.
         // (See GameMaker-HTML5's commit a7c5b909209d5a28602fedfe2031965386a99921)
         *outLocalX0 = cursorX + (float) glyph->offset;
-        *outLocalY0 = cursorY + (float) (int32_t) glyphTpag->targetY;
-        if (DataWin_isVersionAtLeast(dw, 2023, 2, 0, 0)) *outLocalY0 -= (float) sprite->originY;
+        *outLocalY0 = cursorY + (float) (int32_t) glyphTpag->targetY - (float) font->spriteOriginYAdjust;
     } else {
         *outTexId = state->texId;
         *outU0 = (float) (state->fontTpag->sourceX + glyph->sourceX) / (float) state->texW;

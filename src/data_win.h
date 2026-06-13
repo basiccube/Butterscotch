@@ -419,6 +419,8 @@ typedef struct {
     // Sprite font fields (only valid when isSpriteFont is true)
     bool isSpriteFont;
     int32_t spriteIndex; // source sprite index (-1 for regular fonts)
+    // Amount to subtract from each glyph's Y at draw time, ONLY used for sprite fonts.
+    int16_t spriteOriginYAdjust;
 } Font;
 
 // Builds the ASCII fast-path lookup table from font->glyphs. Call after glyphs[] is fully populated.
