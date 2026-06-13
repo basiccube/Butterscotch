@@ -359,11 +359,11 @@ bool platformHandleEvents(void) {
                 break;
             }
             case SDL_EVENT_GAMEPAD_REMOVED: {
-                int instance_id = e.cdevice.which;
-                for (int i = 0; i < MAX_GAMEPADS; i++) {
+                int instanceId = e.cdevice.which;
+                repeat(MAX_GAMEPADS, i) {
                     if (openControllers[i]) {
                         SDL_Joystick* joy = SDL_GetGamepadJoystick(openControllers[i]);
-                        if (joy && SDL_GetJoystickID(joy) == instance_id) {
+                        if (joy && SDL_GetJoystickID(joy) == (SDL_JoystickID) instanceId) {
                             SDL_CloseGamepad(openControllers[i]);
                             openControllers[i] = NULL;
                             break;
