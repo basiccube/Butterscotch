@@ -12712,6 +12712,24 @@ static RValue builtin_tilemap_get_y(VMContext* ctx, RValue* args, MAYBE_UNUSED i
     return RValue_makeReal((GMLReal) runtimeLayer->yOffset);
 }
 
+static void coerceTileCellsToTilemapBounds(RoomLayerTilesData* data, int32_t* cellX, int32_t* cellY) {
+    if (0 > *cellX) *cellX = 0;
+    if (0 > *cellY) *cellY = 0;
+    if (*cellX >= (int32_t) data->tilesX) *cellX = (int32_t) data->tilesX - 1;
+    if (*cellY >= (int32_t) data->tilesY) *cellY = (int32_t) data->tilesY - 1;
+}
+
+static int32_t convertTileCellsToArrayIndex(RoomLayerTilesData* data, int32_t cellX, int32_t cellY) {
+    return cellY * ((int32_t) data->tilesX) + cellX;
+}
+
+static int32_t coerceTileCellsToTilemapBoundsAndConvertToArrayIndex(RoomLayerTilesData* data, int32_t cellX, int32_t cellY) {
+    int32_t coercedCellX = cellX;
+    int32_t coercedCellY = cellY;
+    coerceTileCellsToTilemapBounds(data, &coercedCellX, &coercedCellY);
+    return convertTileCellsToArrayIndex(data, cellX, cellY);
+}
+
 // Maps a room-space pixel coordinate to a flat tileData cell index, applying the owning layer's draw offset.
 // Returns -1 when the tilemap/tileset is invalid or the coordinate falls outside the tilemap.
 static int32_t tilemapGetCellIndexAtPixel(DataWin* dw, RoomLayerTilesData* data, RuntimeLayer* runtimeLayer, GMLReal findX, GMLReal findY, Background** outTileset) {
@@ -12743,14 +12761,9 @@ static int32_t tilemapGetCellIndexAtPixel(DataWin* dw, RoomLayerTilesData* data,
     // The ORIGINAL runner uses >= for both
     if (0.0 > x || 0.0 > y || x >= mapPixelW || y >= mapPixelH) return -1;
 
-    int32_t indexX = (int32_t) GMLReal_floor(x / (GMLReal) tileW);
-    int32_t indexY = (int32_t) GMLReal_floor(y / (GMLReal) tileH);
-    if (0 > indexX) indexX = 0;
-    if (0 > indexY) indexY = 0;
-    if (indexX >= (int32_t) data->tilesX) indexX = (int32_t) data->tilesX - 1;
-    if (indexY >= (int32_t) data->tilesY) indexY = (int32_t) data->tilesY - 1;
-
-    return indexY * ((int32_t) data->tilesX) + indexX;
+    int32_t cellX = (int32_t) GMLReal_floor(x / (GMLReal) tileW);
+    int32_t cellY = (int32_t) GMLReal_floor(y / (GMLReal) tileH);
+    return coerceTileCellsToTilemapBoundsAndConvertToArrayIndex(data, cellX, cellY);
 }
 
 static RValue builtin_tilemap_get(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
@@ -12760,11 +12773,9 @@ static RValue builtin_tilemap_get(VMContext* ctx, RValue* args, MAYBE_UNUSED int
     RoomLayerTilesData* data = findTilemapData(runner, RValue_toInt32(args[0]), &runtimeLayer);
     requireNotNullMessage(runtimeLayer, "Missing Runtime Layer! Bug?");
 
-    int32_t indexX = RValue_toInt32(args[1]);
-    int32_t indexY = RValue_toInt32(args[2]);
-
-    uint32_t cell = data->tileData[indexY * ((int32_t) data->tilesX) + indexX];
-    return RValue_makeReal((GMLReal) cell);
+    int32_t cellX = RValue_toInt32(args[1]);
+    int32_t cellY = RValue_toInt32(args[2]);
+    return RValue_makeReal((GMLReal) coerceTileCellsToTilemapBoundsAndConvertToArrayIndex(data, cellX, cellY));
 }
 
 // tilemap_get_at_pixel(tilemapElementId, x, y): returns the raw tile cell value (index + mirror/flip/rotate bits) at the given room-space pixel coordinate, or -1 if the coordinate falls outside the tilemap.
