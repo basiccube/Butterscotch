@@ -677,7 +677,6 @@ static void parseAGRP(BinaryReader* reader, DataWin* dw) {
         BinaryReader_seek(reader, ptrs[i]);
         a->audioGroups[i].present = true;
         a->audioGroups[i].name = readStringPtr(reader, dw);
-        fprintf(stderr, "%s\n", a->audioGroups[i].name);
         if (DataWin_isVersionAtLeast(dw, 2024, 14, 0, 0)) {
             a->audioGroups[i].path = readStringPtr(reader, dw);
         }
