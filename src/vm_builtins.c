@@ -1659,7 +1659,7 @@ void VMBuiltins_setVariable(VMContext* ctx, Instance* inst, int16_t builtinVarId
         case BUILTIN_VAR_ARGUMENT:
             if (ctx->scriptArgs != nullptr && ctx->scriptArgCount > arrayIndex && arrayIndex >= 0) {
                 RValue_free(&ctx->scriptArgs[arrayIndex]);
-                ctx->scriptArgs[arrayIndex] = val;
+                ctx->scriptArgs[arrayIndex] = RValue_makeIndependent(val);
             }
             return;
 
@@ -1668,7 +1668,7 @@ void VMBuiltins_setVariable(VMContext* ctx, Instance* inst, int16_t builtinVarId
             int argNumber = builtinVarId - BUILTIN_VAR_ARGUMENT0;
             if (ctx->scriptArgs != nullptr && ctx->scriptArgCount > argNumber) {
                 RValue_free(&ctx->scriptArgs[argNumber]);
-                ctx->scriptArgs[argNumber] = val;
+                ctx->scriptArgs[argNumber] = RValue_makeIndependent(val);
             }
             return;
         }
