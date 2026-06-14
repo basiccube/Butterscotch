@@ -9411,6 +9411,25 @@ static RValue builtin_draw_background_stretched(VMContext* ctx, RValue* args, MA
     return RValue_makeUndefined();
 }
 
+static RValue builtin_draw_background_part(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
+    Runner* runner = ctx->runner;
+    if (runner->renderer == nullptr || 7 > argCount) return RValue_makeUndefined();
+
+    int32_t bgIndex = RValue_toInt32(args[0]);
+    int32_t left = RValue_toInt32(args[1]);
+    int32_t top = RValue_toInt32(args[2]);
+    int32_t width = RValue_toInt32(args[3]);
+    int32_t height = RValue_toInt32(args[4]);
+    float x = (float) RValue_toReal(args[5]);
+    float y = (float) RValue_toReal(args[6]);
+
+    int32_t tpagIndex = Renderer_resolveBackgroundTPAGIndex(runner->dataWin, bgIndex);
+    if (0 > tpagIndex) return RValue_makeUndefined();
+
+    runner->renderer->vtable->drawSpritePart(runner->renderer, tpagIndex, left, top, width, height, x, y, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0xFFFFFF, runner->renderer->drawAlpha);
+    return RValue_makeUndefined();
+}
+
 static RValue builtin_draw_background_part_ext(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
     Runner* runner = ctx->runner;
     if (runner->renderer == nullptr || 11 > argCount) return RValue_makeUndefined();
@@ -15388,6 +15407,7 @@ void VMBuiltins_registerAll(VMContext* ctx) {
         VM_registerBuiltin(ctx, "draw_background", builtin_draw_background);
         VM_registerBuiltin(ctx, "draw_background_ext", builtin_draw_background_ext);
         VM_registerBuiltin(ctx, "draw_background_stretched", builtin_draw_background_stretched);
+        VM_registerBuiltin(ctx, "draw_background_part", builtin_draw_background_part);
         VM_registerBuiltin(ctx, "draw_background_part_ext", builtin_draw_background_part_ext);
         VM_registerBuiltin(ctx, "draw_background_tiled", builtin_draw_background_tiled);
         VM_registerBuiltin(ctx, "draw_background_tiled_ext", builtin_draw_background_tiled_ext);
