@@ -4957,7 +4957,7 @@ static DsPriority* dsPriorityGet(Runner* runner, int32_t id) {
     return &runner->dsPriorityPool[id];
 }
 
-static RValue builtin_ds_priority_create(MAYBE_UNUSED VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
+static RValue builtin_ds_priority_create(MAYBE_UNUSED VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
     return RValue_makeReal((GMLReal) dsPriorityCreate(ctx->runner));
 }
 
@@ -15090,6 +15090,7 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "ds_queue_read", builtin_ds_queue_read);
 
     // ds_priority
+    VM_registerBuiltin(ctx, "ds_priority_create", builtin_ds_priority_create);
     VM_registerBuiltin(ctx, "ds_priority_clear", builtin_ds_priority_clear);
     VM_registerBuiltin(ctx, "ds_priority_copy", builtin_ds_priority_copy);
     VM_registerBuiltin(ctx, "ds_priority_destroy", builtin_ds_priority_destroy);
