@@ -1910,6 +1910,16 @@ void Runner_reset(Runner* runner) {
     runner->drawableListSortDirty = false;
 }
 
+static int32_t compareTargetObjectIndexAscending(const void *a, const void *b) {
+    FlattenedCollisionEvent* flat1 = (FlattenedCollisionEvent*) a;
+    FlattenedCollisionEvent* flat2 = (FlattenedCollisionEvent*) b;
+    if (flat1->targetObjectIndex > flat2->targetObjectIndex)
+        return 1;
+    else if (flat2->targetObjectIndex > flat1->targetObjectIndex)
+        return -1;
+    else return 0;
+}
+
 // Flattens collision-event inheritance into one list per object: Child-defined collision events override the parent's events
 //
 // (The YoYo Runner calls it "ExpandCollisionEvents")
@@ -1966,6 +1976,8 @@ static void flattenCollisionEvents(Runner* runner) {
             ancestor = anc->parentId;
             depth++;
         }
+
+        qsort(dst->events, dst->eventCount, sizeof(FlattenedCollisionEvent), compareTargetObjectIndexAscending);
     }
 }
 
