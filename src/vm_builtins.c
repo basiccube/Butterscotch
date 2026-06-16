@@ -14105,8 +14105,8 @@ static RValue builtin_json_decode(VMContext* ctx, RValue* args, int32_t argCount
         shput(*mapPtr, "default", RValue_makeIndependent(args[0]));
     } else {
         repeat(JsonReader_objectLength(json), i) {
-            const char *key = safeStrdup(JsonReader_getObjectKey(json, i));
-            RValue val = RValue_makeOwnedString(safeStrdup(JsonReader_getString(JsonReader_getObjectValue(json, i))));
+            const char *key = safeStrdup(JsonReader_getJsonKeyByIndex(json, i));
+            RValue val = RValue_makeOwnedString(safeStrdup(JsonReader_getString(JsonReader_getJsonValueByIndex(json, i))));
             shput(*mapPtr, key, val);
         }
 

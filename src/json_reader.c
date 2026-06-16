@@ -488,7 +488,7 @@ int JsonReader_objectLength(const JsonValue* value) {
     return value->object.count;
 }
 
-JsonValue* JsonReader_getObject(const JsonValue* value, const char* key) {
+JsonValue* JsonReader_getJsonValueByKey(const JsonValue* value, const char* key) {
     for (int i = 0; i < value->object.count; ++i) {
         if (strcmp(value->object.keys[i], key) == 0) {
             return &value->object.values[i];
@@ -497,12 +497,12 @@ JsonValue* JsonReader_getObject(const JsonValue* value, const char* key) {
     return nullptr;
 }
 
-const char* JsonReader_getObjectKey(const JsonValue* value, int index) {
+const char* JsonReader_getJsonKeyByIndex(const JsonValue* value, int index) {
     if (0 > index || index >= value->object.count) return nullptr;
     return value->object.keys[index];
 }
 
-JsonValue* JsonReader_getObjectValue(const JsonValue* value, int index) {
+JsonValue* JsonReader_getJsonValueByIndex(const JsonValue* value, int index) {
     if (0 > index || index >= value->object.count) return nullptr;
     return &value->object.values[index];
 }

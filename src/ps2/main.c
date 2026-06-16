@@ -89,13 +89,13 @@ static bool padWasStable[2] = {false, false};
 static bool gamepadApiEnabled = false;
 
 static void parsePadMappings(JsonValue* configRoot, const char* key, PadMapping** outMappings, int* outCount, const char* logLabel) {
-    JsonValue* mappingsObj = JsonReader_getObject(configRoot, key);
+    JsonValue* mappingsObj = JsonReader_getJsonValueByKey(configRoot, key);
     if (mappingsObj == nullptr || !JsonReader_isObject(mappingsObj)) return;
     int count = JsonReader_objectLength(mappingsObj);
     PadMapping* mappings = safeMalloc(sizeof(PadMapping) * count);
     repeat(count, i) {
-        const char* padButtonStr = JsonReader_getObjectKey(mappingsObj, i);
-        JsonValue* gmlKeyVal = JsonReader_getObjectValue(mappingsObj, i);
+        const char* padButtonStr = JsonReader_getJsonKeyByIndex(mappingsObj, i);
+        JsonValue* gmlKeyVal = JsonReader_getJsonValueByIndex(mappingsObj, i);
         mappings[i].padButton = (uint16_t) atoi(padButtonStr);
         mappings[i].gmlKey = (int32_t) JsonReader_getInt(gmlKeyVal);
         printf("CONFIG.JSN: %s mapping pad=%d -> gmlKey=%d\n", logLabel, mappings[i].padButton, mappings[i].gmlKey);
@@ -390,9 +390,9 @@ int main(int argc, char* argv[]) {
         while (true) {}
     }
 
-    bool lazyLoadRooms = JsonReader_getBool(JsonReader_getObject(configRoot, "lazyLoadRooms"));
+    bool lazyLoadRooms = JsonReader_getBool(JsonReader_getJsonValueByKey(configRoot, "lazyLoadRooms"));
     StringBooleanEntry* eagerRooms = nullptr; // stb_ds string-keyed set; keys borrowed from configRoot
-    JsonValue* eagerArr = JsonReader_getObject(configRoot, "eagerlyLoadedRooms");
+    JsonValue* eagerArr = JsonReader_getJsonValueByKey(configRoot, "eagerlyLoadedRooms");
     int n = JsonReader_arrayLength(eagerArr);
     repeat(n, i) {
         const char* name = JsonReader_getString(JsonReader_getArrayElement(eagerArr, i));
@@ -474,7 +474,7 @@ int main(int argc, char* argv[]) {
     // ===[ Initialize Renderer ]===
     PS2Overlay_drawStatusScreen(dataWin->gen8.displayName, "Initializing renderer...", true);
 
-    int64_t eeAtlasCacheBytes = JsonReader_getInt(JsonReader_getObject(configRoot, "eeAtlasCacheBytes"));
+    int64_t eeAtlasCacheBytes = JsonReader_getInt(JsonReader_getJsonValueByKey(configRoot, "eeAtlasCacheBytes"));
     Renderer* renderer = GsRenderer_create(gsGlobal, eeAtlasCacheBytes);
 
     // ===[ Initialize Audio System ]===
@@ -491,7 +491,7 @@ int main(int argc, char* argv[]) {
     runner->gameStartTime = nowNanos();
 
     // Parse disabledObjects from CONFIG.JSN
-    JsonValue* disabledObjectsArr = JsonReader_getObject(configRoot, "disabledObjects");
+    JsonValue* disabledObjectsArr = JsonReader_getJsonValueByKey(configRoot, "disabledObjects");
     if (disabledObjectsArr != nullptr && JsonReader_isArray(disabledObjectsArr)) {
         sh_new_strdup(runner->disabledObjects);
         int disabledCount = JsonReader_arrayLength(disabledObjectsArr);
@@ -509,9 +509,9 @@ int main(int argc, char* argv[]) {
     parsePadMappings(configRoot, "controller1Mappings", &pad1Mappings, &pad1MappingCount, "controller1");
     parsePadMappings(configRoot, "controller2Mappings", &pad2Mappings, &pad2MappingCount, "controller2");
 
-    JsonValue* gamepadObj = JsonReader_getObject(configRoot, "gamepad");
+    JsonValue* gamepadObj = JsonReader_getJsonValueByKey(configRoot, "gamepad");
     if (gamepadObj != nullptr && JsonReader_isObject(gamepadObj)) {
-        gamepadApiEnabled = JsonReader_getBool(JsonReader_getObject(gamepadObj, "enabled"));
+        gamepadApiEnabled = JsonReader_getBool(JsonReader_getJsonValueByKey(gamepadObj, "enabled"));
     }
     if (gamepadApiEnabled) {
         printf("CONFIG.JSN: GameMaker gamepad API enabled\n");
@@ -551,7 +551,7 @@ int main(int argc, char* argv[]) {
     StartTimerSystemTime();
 
     // ===[ Main Loop ]===
-    bool debugOverlayStartEnabled = JsonReader_getBool(JsonReader_getObject(configRoot, "debugOverlayEnabled"));
+    bool debugOverlayStartEnabled = JsonReader_getBool(JsonReader_getJsonValueByKey(configRoot, "debugOverlayEnabled"));
     PS2Overlay_setDebugOverlayState(debugOverlayStartEnabled ? STATS_ENABLED : STATS_DISABLED, runner);
 
     u64 lastFrameStartTime = GetTimerSystemTime(); // for delta_time

@@ -516,19 +516,19 @@ static FileSystemVtable ps2FileSystemVtable;
 // ===[ Lifecycle ]===
 
 static SaveIconConfig parseSaveIconConfig(JsonValue* configRoot) {
-    JsonValue* saveIconObj = JsonReader_getObject(configRoot, "saveIcon");
+    JsonValue* saveIconObj = JsonReader_getJsonValueByKey(configRoot, "saveIcon");
     requireNotNullMessage(saveIconObj, "CONFIG.JSN is missing the 'saveIcon' section");
     require(JsonReader_isObject(saveIconObj));
 
     SaveIconConfig config = {0};
 
     // bgAlpha (0x00-0x80)
-    JsonValue* bgAlphaVal = JsonReader_getObject(saveIconObj, "bgAlpha");
+    JsonValue* bgAlphaVal = JsonReader_getJsonValueByKey(saveIconObj, "bgAlpha");
     requireNotNullMessage(bgAlphaVal, "saveIcon.bgAlpha is missing");
     config.bgAlpha = (uint32_t) JsonReader_getDouble(bgAlphaVal);
 
     // bgColors: array of 4 arrays of 3 ints [R, G, B] (A is always 0)
-    JsonValue* bgColorsArr = JsonReader_getObject(saveIconObj, "bgColors");
+    JsonValue* bgColorsArr = JsonReader_getJsonValueByKey(saveIconObj, "bgColors");
     requireNotNullMessage(bgColorsArr, "saveIcon.bgColors is missing");
     require(JsonReader_isArray(bgColorsArr) && JsonReader_arrayLength(bgColorsArr) == 4);
     repeat(4, i) {
@@ -538,7 +538,7 @@ static SaveIconConfig parseSaveIconConfig(JsonValue* configRoot) {
     }
 
     // lightDirs: array of 3 arrays of 3 floats [X, Y, Z] (W is always 0.0)
-    JsonValue* lightDirsArr = JsonReader_getObject(saveIconObj, "lightDirs");
+    JsonValue* lightDirsArr = JsonReader_getJsonValueByKey(saveIconObj, "lightDirs");
     requireNotNullMessage(lightDirsArr, "saveIcon.lightDirs is missing");
     require(JsonReader_isArray(lightDirsArr) && JsonReader_arrayLength(lightDirsArr) == 3);
     repeat(3, i) {
@@ -548,7 +548,7 @@ static SaveIconConfig parseSaveIconConfig(JsonValue* configRoot) {
     }
 
     // lightColors: array of 3 arrays of 3 floats [R, G, B] (A is always 0.0)
-    JsonValue* lightColorsArr = JsonReader_getObject(saveIconObj, "lightColors");
+    JsonValue* lightColorsArr = JsonReader_getJsonValueByKey(saveIconObj, "lightColors");
     requireNotNullMessage(lightColorsArr, "saveIcon.lightColors is missing");
     require(JsonReader_isArray(lightColorsArr) && JsonReader_arrayLength(lightColorsArr) == 3);
     repeat(3, i) {
@@ -558,7 +558,7 @@ static SaveIconConfig parseSaveIconConfig(JsonValue* configRoot) {
     }
 
     // ambient: array of 3 floats [R, G, B] (A is always 0.0)
-    JsonValue* ambientArr = JsonReader_getObject(saveIconObj, "ambient");
+    JsonValue* ambientArr = JsonReader_getJsonValueByKey(saveIconObj, "ambient");
     requireNotNullMessage(ambientArr, "saveIcon.ambient is missing");
     JsonReader_readFloatArray(ambientArr, config.ambient, 3);
     config.ambient[3] = 0.0f; // A = 0
@@ -567,7 +567,7 @@ static SaveIconConfig parseSaveIconConfig(JsonValue* configRoot) {
 }
 
 FileSystem* Ps2FileSystem_create(JsonValue* configRoot, const char* gameTitle) {
-    JsonValue* fileSystemObj = JsonReader_getObject(configRoot, "fileSystem");
+    JsonValue* fileSystemObj = JsonReader_getJsonValueByKey(configRoot, "fileSystem");
     require(fileSystemObj != nullptr && JsonReader_isObject(fileSystemObj));
 
     Ps2FileSystem* pfs = safeCalloc(1, sizeof(Ps2FileSystem));
@@ -598,8 +598,8 @@ FileSystem* Ps2FileSystem_create(JsonValue* configRoot, const char* gameTitle) {
 
     int entryCount = JsonReader_objectLength(fileSystemObj);
     repeat(entryCount, i) {
-        const char* gameFileName = JsonReader_getObjectKey(fileSystemObj, i);
-        JsonValue* pathArray = JsonReader_getObjectValue(fileSystemObj, i);
+        const char* gameFileName = JsonReader_getJsonKeyByIndex(fileSystemObj, i);
+        JsonValue* pathArray = JsonReader_getJsonValueByIndex(fileSystemObj, i);
 
         require(JsonReader_isArray(pathArray));
 
