@@ -15,21 +15,27 @@ typedef enum {
 } BatchType;
 
 // ===[ GLRenderer Struct ]===
+typedef struct {
+    char* name; // owned
+    int32_t location;
+    GLenum type;
+    uint32_t samplerSlot;
+} GLShaderUniform;
+
+typedef struct {
+    GLuint shaderId;
+    bool compiled;
+    uint32_t uniformCount;
+    GLShaderUniform* uniforms;
+} GMLShader;
+
 // Exposed in the header so platform-specific code (main.c) can access FBO fields for screenshots.
 typedef struct {
     Renderer base; // Must be first field for struct embedding
 
-    GLuint shaderProgram;
-    GLint uProjection;
-    GLint uTexture;
-    GLint uAlphaTestRef;
-    GLint uFogColor;
-    GLint uAlphaTestEnabled;
-    GLuint* gmlShaders;
-    bool* gmlShaderCompiled;
+    GMLShader* defaultShaderProgram;
+    GMLShader* gmlShaders;
     uint32_t gmlShaderCount;
-    int32_t** sampler2DLookUpTable;
-    GLint** sampler2DLocationLookUpTable;
 
     bool alphaTestEnable;
     float alphaTestRef;
