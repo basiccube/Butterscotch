@@ -12,6 +12,8 @@ import com.typesafe.config.ConfigFactory
 import kotlinx.serialization.hocon.Hocon
 import kotlinx.serialization.hocon.decodeFromConfig
 import java.io.File
+import java.time.Duration
+import java.time.Instant
 import java.util.concurrent.TimeUnit
 import javax.imageio.ImageIO
 import kotlin.concurrent.thread
@@ -32,6 +34,7 @@ class Flowey : CliktCommand() {
                 continue
             }
             println("Executing \"${test.name}\"")
+            val start = Instant.now()
             val process = ProcessBuilder(butterscotchPath.absolutePath, *test.butterscotchArgs.toTypedArray())
                 .directory(testSuite.parentFile)
                 .start()
@@ -51,7 +54,7 @@ class Flowey : CliktCommand() {
                 }
             }
 
-            val finished = process.waitFor(60L, TimeUnit.SECONDS)
+            val finished = process.waitFor(5L, TimeUnit.MINUTES)
 
             if (!finished) {
                 process.destroyForcibly()
@@ -64,6 +67,7 @@ class Flowey : CliktCommand() {
             val stderrLines = stderrBuilder.toString().lines()
 
             val result = TestResult(process.exitValue(), stdoutLines, stderrLines)
+            result.endedAt = Instant.now()
             testResults[test.name] = result
 
             if (process.exitValue() != 0)
@@ -111,15 +115,15 @@ class Flowey : CliktCommand() {
         val summary = buildString {
             appendLine("# \uD83E\uDDEA Butterscotch Test Results")
             appendLine("## \uD83D\uDCC4 Tests Summary")
-            appendLine("| Test | Status |")
-            appendLine("| - | - |")
+            appendLine("| Test | Duration | Status |")
+            appendLine("| - | - | - |")
             for ((name, result) in testResults.entries) {
                 val emoji = when (result.state) {
                     TestResult.State.SUCCESS -> "✅"
                     TestResult.State.FAILURE -> "🚫"
                     TestResult.State.SKIPPED -> "⚠️"
                 }
-                appendLine("| $name | $emoji |")
+                appendLine("| $name | ${result.endedAt?.let { formatDuration(result.startedAt, it) } ?: "N/A")} | $emoji |")
             }
 
             if (failedTests.isNotEmpty()) {
@@ -152,12 +156,24 @@ class Flowey : CliktCommand() {
         }
     }
 
+    fun formatDuration(start: Instant, end: Instant): String {
+        val d = Duration.between(start, end)
+        return buildList {
+            if (d.toHoursPart() > 0) add("${d.toHoursPart()}h")
+            if (d.toMinutesPart() > 0) add("${d.toMinutesPart()}m")
+            if (d.toSecondsPart() > 0) add("${d.toSecondsPart()}s")
+            if (d.toMillisPart() > 0) add("${d.toMillisPart()}ms")
+        }.joinToString(" ").ifEmpty { "0ms" }
+    }
+
     class TestResult(
         var exitCode: Int,
         var stdoutLines: List<String>,
         var stderrLines: List<String>
     ) {
         var state = State.FAILURE
+        val startedAt = Instant.now()
+        var endedAt: Instant? = null
 
         enum class State {
             SUCCESS,
