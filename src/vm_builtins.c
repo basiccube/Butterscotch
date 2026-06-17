@@ -12585,6 +12585,12 @@ static RValue builtin_layer_tile_visible(VMContext* ctx, RValue* args, MAYBE_UNU
     return RValue_makeUndefined();
 }
 
+static bool isValidLayerSpriteElement(RuntimeLayerElement* element) {
+    bool isValid = element != nullptr && element->type == RuntimeLayerElementType_Sprite;
+    requireNotNull(element->spriteElement); // If this crashes then something went DEEPLY wrong
+    return isValid;
+}
+
 static RValue builtin_layer_sprite_get_id(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
     Runner* runner = ctx->runner;
     RValue idOrName = args[0];
@@ -12606,7 +12612,7 @@ static RValue builtin_layer_sprite_get_id(VMContext* ctx, RValue* args, MAYBE_UN
 
     repeat(arrlen(layer->elements), i) {
         RuntimeLayerElement* element = &layer->elements[i];
-        if (element->type == RuntimeLayerElementType_Sprite) {
+        if (isValidLayerSpriteElement(element)) {
             if (element->spriteElement->name != nullptr && strcmp(element->spriteElement->name, name) == 0) {
                 free(name);
                 return RValue_makeReal(element->id);
@@ -12616,12 +12622,6 @@ static RValue builtin_layer_sprite_get_id(VMContext* ctx, RValue* args, MAYBE_UN
 
     free(name);
     return RValue_makeReal(-1.0);
-}
-
-static bool isValidLayerSpriteElement(RuntimeLayerElement* element) {
-    bool isValid = element != nullptr && element->type == RuntimeLayerElementType_Sprite;
-    requireNotNull(element->spriteElement); // If this crashes then something went DEEPLY wrong
-    return isValid;
 }
 
 static RValue builtin_layer_sprite_get_sprite(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
