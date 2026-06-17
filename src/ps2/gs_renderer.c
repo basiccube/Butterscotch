@@ -1333,7 +1333,7 @@ static void gsDrawSprite(Renderer* renderer, int32_t tpagIndex, float x, float y
     }
 }
 
-static void gsDrawTiled(Renderer* renderer, int32_t tpagIndex, float originX, float originY, float x, float y, float xscale, float yscale, bool tileX, bool tileY, float roomW, float roomH, uint32_t color, float alpha) {
+static void gsDrawSpriteTiled(Renderer* renderer, int32_t tpagIndex, float originX, float originY, float x, float y, float xscale, float yscale, bool tileX, bool tileY, float roomW, float roomH, uint32_t color, float alpha) {
     GsRenderer* gs = (GsRenderer*) renderer;
     DataWin* dw = renderer->dataWin;
 
@@ -2800,6 +2800,10 @@ static float gsGetSurfaceHeight(Renderer* renderer, int32_t surfaceID) {
     return (float) gs->surfaces[surfaceID].height;
 }
 
+static void gsDrawSurfaceTiled(MAYBE_UNUSED Renderer* renderer, MAYBE_UNUSED int32_t surfaceID, MAYBE_UNUSED float x, MAYBE_UNUSED float y, MAYBE_UNUSED float xscale, MAYBE_UNUSED float yscale, MAYBE_UNUSED float roomW, MAYBE_UNUSED float roomH, MAYBE_UNUSED uint32_t color, MAYBE_UNUSED float alpha) {
+    // No-op
+}
+
 static void gsDrawSurface(Renderer* renderer, int32_t surfaceID, int32_t srcLeft, int32_t srcTop, int32_t srcWidth, int32_t srcHeight, float x, float y, float xscale, float yscale, float angleDeg, uint32_t color, float alpha) {
     GsRenderer* gs = (GsRenderer*) renderer;
 
@@ -3104,7 +3108,7 @@ Renderer* GsRenderer_create(GSGLOBAL* gsGlobal, int64_t eeAtlasCacheMiB) {
     gsVtable.gpuSetColorWriteEnable = gsGpuSetColorWriteEnable;
     gsVtable.gpuGetColorWriteEnable = gsGpuGetColorWriteEnable;
     gsVtable.drawTile = gsDrawTile;
-    gsVtable.drawTiled = gsDrawTiled;
+    gsVtable.drawSpriteTiled = gsDrawSpriteTiled;
     gsVtable.drawTiledPart = gsDrawTiledPart;
     gsVtable.createSurface = gsCreateSurface;
     gsVtable.surfaceExists = gsSurfaceExists;
@@ -3113,6 +3117,7 @@ Renderer* GsRenderer_create(GSGLOBAL* gsGlobal, int64_t eeAtlasCacheMiB) {
     gsVtable.getSurfaceWidth = gsGetSurfaceWidth;
     gsVtable.getSurfaceHeight = gsGetSurfaceHeight;
     gsVtable.drawSurface = gsDrawSurface;
+    gsVtable.drawSurfaceTiled = gsDrawSurfaceTiled;
     gsVtable.surfaceResize = gsSurfaceResize;
     gsVtable.surfaceFree = gsSurfaceFree;
     gsVtable.surfaceCopy = gsSurfaceCopy;

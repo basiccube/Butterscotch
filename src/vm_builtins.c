@@ -9594,7 +9594,7 @@ static RValue builtin_draw_background_tiled(VMContext* ctx, RValue* args, MAYBE_
 
     float roomW = (float) runner->currentRoom->width;
     float roomH = (float) runner->currentRoom->height;
-    runner->renderer->vtable->drawTiled(runner->renderer, tpagIndex, 0.0f, 0.0f, x, y, 1.0f, 1.0f, true, true, roomW, roomH, 0xFFFFFFu, runner->renderer->drawAlpha);
+    runner->renderer->vtable->drawSpriteTiled(runner->renderer, tpagIndex, 0.0f, 0.0f, x, y, 1.0f, 1.0f, true, true, roomW, roomH, 0xFFFFFFu, runner->renderer->drawAlpha);
     return RValue_makeUndefined();
 }
 
@@ -9615,7 +9615,7 @@ static RValue builtin_draw_background_tiled_ext(VMContext* ctx, RValue* args, MA
 
     float roomW = (float) runner->currentRoom->width;
     float roomH = (float) runner->currentRoom->height;
-    runner->renderer->vtable->drawTiled(runner->renderer, tpagIndex, 0.0f, 0.0f, x, y, xscale, yscale, true, true, roomW, roomH, color, alpha);
+    runner->renderer->vtable->drawSpriteTiled(runner->renderer, tpagIndex, 0.0f, 0.0f, x, y, xscale, yscale, true, true, roomW, roomH, color, alpha);
     return RValue_makeUndefined();
 }
 
@@ -10088,6 +10088,36 @@ static RValue builtin_draw_surface_stretched_ext(VMContext* ctx, RValue* args, M
         float xscale = surfW > 0.0f ? width  / surfW : 1.0f;
         float yscale = surfH > 0.0f ? height / surfH : 1.0f;
         runner->renderer->vtable->drawSurface(runner->renderer, surfaceId, 0, 0, -1, -1, x, y, xscale, yscale, 0.0, color, alpha);
+    }
+    return RValue_makeUndefined();
+}
+
+static RValue builtin_draw_surface_tiled(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
+    int32_t surfaceId = (int32_t) RValue_toReal(args[0]);
+    float x = (float) RValue_toReal(args[1]);
+    float y = (float) RValue_toReal(args[2]);
+    Runner* runner = ctx->runner;
+    if (runner->renderer != nullptr) {
+        float roomW = (float) runner->currentRoom->width;
+        float roomH = (float) runner->currentRoom->height;
+        runner->renderer->vtable->drawSurfaceTiled(runner->renderer, surfaceId, x, y, 1.0f, 1.0f, roomW, roomH, 0xFFFFFFFF, runner->renderer->drawAlpha);
+    }
+    return RValue_makeUndefined();
+}
+
+static RValue builtin_draw_surface_tiled_ext(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
+    int32_t surfaceId = (int32_t) RValue_toReal(args[0]);
+    float x = (float) RValue_toReal(args[1]);
+    float y = (float) RValue_toReal(args[2]);
+    float xscale = (float) RValue_toReal(args[3]);
+    float yscale = (float) RValue_toReal(args[4]);
+    uint32_t color = (uint32_t) RValue_toInt32(args[5]);
+    float alpha = (float) RValue_toReal(args[6]);
+    Runner* runner = ctx->runner;
+    if (runner->renderer != nullptr) {
+        float roomW = (float) runner->currentRoom->width;
+        float roomH = (float) runner->currentRoom->height;
+        runner->renderer->vtable->drawSurfaceTiled(runner->renderer, surfaceId, x, y, xscale, yscale, roomW, roomH, color, alpha);
     }
     return RValue_makeUndefined();
 }
@@ -15545,6 +15575,8 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "draw_surface_part_ext", builtin_draw_surface_part_ext);
     VM_registerBuiltin(ctx, "draw_surface_stretched", builtin_draw_surface_stretched);
     VM_registerBuiltin(ctx, "draw_surface_stretched_ext", builtin_draw_surface_stretched_ext);
+    VM_registerBuiltin(ctx, "draw_surface_tiled", builtin_draw_surface_tiled);
+    VM_registerBuiltin(ctx, "draw_surface_tiled_ext", builtin_draw_surface_tiled_ext);
     if(!isGMS2) {
         VM_registerBuiltin(ctx, "draw_background", builtin_draw_background);
         VM_registerBuiltin(ctx, "draw_background_ext", builtin_draw_background_ext);

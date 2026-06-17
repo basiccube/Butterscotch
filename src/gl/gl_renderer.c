@@ -962,39 +962,50 @@ static void glDrawSprite(Renderer* renderer, int32_t tpagIndex, float x, float y
     );
 }
 
-static void glDrawTiled(Renderer* renderer, int32_t tpagIndex, float originX, float originY, float x, float y, float xscale, float yscale, bool tileX, bool tileY, float roomW, float roomH, uint32_t color, float alpha) {
-    GLRenderer* gl = (GLRenderer*) renderer;
-    TexturePageItem* tpag;
-    GLuint texId;
-    int32_t texW, texH;
-    if (!resolveSpriteTexture(gl, tpagIndex, &tpag, &texId, &texW, &texH)) return;
-
-    float axScale = fabsf(xscale);
-    float ayScale = fabsf(yscale);
-    float tileW = (float) tpag->boundingWidth * axScale;
-    float tileH = (float) tpag->boundingHeight * ayScale;
+static void drawTiled(
+    GLRenderer* gl,
+    GLuint texId,
+    float gridX,
+    float gridY,
+    float tileW,
+    float tileH,
+    bool tileX,
+    bool tileY,
+    float roomW,
+    float roomH,
+    float quadOffsetX0,
+    float quadW,
+    float quadOffsetY0,
+    float quadH,
+    float u0,
+    float v0,
+    float u1,
+    float v1,
+    uint32_t color,
+    float alpha
+) {
     if (0 >= tileW || 0 >= tileH) return;
 
     float startX, endX, startY, endY;
     if (tileX) {
-        startX = fmodf(x - originX * axScale, tileW);
+        startX = fmodf(gridX, tileW);
         if (startX > 0) startX -= tileW;
         endX = roomW;
     } else {
-        startX = x - originX * axScale;
+        startX = gridX;
         endX = startX + tileW;
     }
     if (tileY) {
-        startY = fmodf(y - originY * ayScale, tileH);
+        startY = fmodf(gridY, tileH);
         if (startY > 0) startY -= tileH;
         endY = roomH;
     } else {
-        startY = y - originY * ayScale;
+        startY = gridY;
         endY = startY + tileH;
     }
 
     // Optimization for 2D affine projects: Clip the tiled extent to the world-space AABB of what the active projection can see.
-    const Matrix4f* projection = &renderer->gmlMatrices[MATRIX_WORLD_VIEW_PROJECTION];
+    const Matrix4f* projection = &gl->base.gmlMatrices[MATRIX_WORLD_VIEW_PROJECTION];
     Matrix4f invProjection;
     if (Matrix4f_isAffine2D(projection) && Matrix4f_inverse(&invProjection, projection)) {
         // The borders of the screen
@@ -1021,22 +1032,6 @@ static void glDrawTiled(Renderer* renderer, int32_t tpagIndex, float originX, fl
     }
     if (startX >= endX || startY >= endY) return;
 
-    float u0 = (float) tpag->sourceX / (float) texW;
-    float v0 = (float) tpag->sourceY / (float) texH;
-    float u1 = (float) (tpag->sourceX + tpag->sourceWidth) / (float) texW;
-    float v1 = (float) (tpag->sourceY + tpag->sourceHeight) / (float) texH;
-
-    // Use targetWidth/Height (draw size in bounding rect), not sourceWidth/Height (texture sample size).
-    // They differ when the texture was auto-downscaled by GMS to fit a texture page.
-    float localX0 = (float) tpag->targetX - originX;
-    float localY0 = (float) tpag->targetY - originY;
-    float localX1 = localX0 + (float) tpag->targetWidth;
-    float localY1 = localY0 + (float) tpag->targetHeight;
-    float sx0 = xscale * localX0;
-    float sy0 = yscale * localY0;
-    float sx1 = xscale * localX1;
-    float sy1 = yscale * localY1;
-
     float r = (float) BGR_R(color) / 255.0f;
     float g = (float) BGR_G(color) / 255.0f;
     float b = (float) BGR_B(color) / 255.0f;
@@ -1049,18 +1044,67 @@ static void glDrawTiled(Renderer* renderer, int32_t tpagIndex, float originX, fl
     repeat(tilesY, iy) {
         float dy = startY + (float) iy * tileH;
         if (dy >= endY) break;
-        float cy = dy + originY * ayScale;
-        float vy0 = cy + sy0;
-        float vy1 = cy + sy1;
+        float vy0 = dy + quadOffsetY0;
+        float vy1 = vy0 + quadH;
         repeat(tilesX, ix) {
             float dx = startX + (float) ix * tileW;
             if (dx >= endX) break;
-            float cx = dx + originX * axScale;
-            float vx0 = cx + sx0;
-            float vx1 = cx + sx1;
+            float vx0 = dx + quadOffsetX0;
+            float vx1 = vx0 + quadW;
             emitTexturedQuad(gl, texId, vx0, vy0, vx1, vy0, vx1, vy1, vx0, vy1, u0, v0, u1, v1, r, g, b, r, g, b, r, g, b, r, g, b, alpha);
         }
     }
+}
+
+static void glDrawSpriteTiled(Renderer* renderer, int32_t tpagIndex, float originX, float originY, float x, float y, float xscale, float yscale, bool tileX, bool tileY, float roomW, float roomH, uint32_t color, float alpha) {
+    GLRenderer* gl = (GLRenderer*) renderer;
+    TexturePageItem* tpag;
+    GLuint texId;
+    int32_t texW, texH;
+    if (!resolveSpriteTexture(gl, tpagIndex, &tpag, &texId, &texW, &texH)) return;
+
+    float axScale = fabsf(xscale);
+    float ayScale = fabsf(yscale);
+    float tileW = (float) tpag->boundingWidth * axScale;
+    float tileH = (float) tpag->boundingHeight * ayScale;
+
+    float u0 = (float) tpag->sourceX / (float) texW;
+    float v0 = (float) tpag->sourceY / (float) texH;
+    float u1 = (float) (tpag->sourceX + tpag->sourceWidth) / (float) texW;
+    float v1 = (float) (tpag->sourceY + tpag->sourceHeight) / (float) texH;
+
+    // Use targetWidth/Height (draw size in bounding rect), not sourceWidth/Height (texture sample size).
+    // They differ when the texture was auto-downscaled by GMS to fit a texture page.
+    float localX0 = (float) tpag->targetX - originX;
+    float localY0 = (float) tpag->targetY - originY;
+    // Per-tile quad origin = grid cell (dx) + originX*axScale (cancels the grid anchor) + xscale*localX0
+    float quadOffX0 = originX * axScale + xscale * localX0;
+    float quadOffY0 = originY * ayScale + yscale * localY0;
+    float quadW = xscale * (float) tpag->targetWidth;
+    float quadH = yscale * (float) tpag->targetHeight;
+
+    drawTiled(
+        gl,
+        texId,
+        x - originX * axScale,
+        y - originY * ayScale,
+        tileW,
+        tileH,
+        tileX,
+        tileY,
+        roomW,
+        roomH,
+        quadOffX0,
+        quadW,
+        quadOffY0,
+        quadH,
+        u0,
+        v0,
+        u1,
+        v1,
+        color,
+        alpha
+    );
 }
 
 static void glDrawSpritePart(Renderer* renderer, int32_t tpagIndex, int32_t srcOffX, int32_t srcOffY, int32_t srcW, int32_t srcH, float x, float y, float xscale, float yscale, float angleDeg, float pivotX, float pivotY, uint32_t color, float alpha) {
@@ -1987,11 +2031,10 @@ static void glDrawSurface(Renderer* renderer, int32_t surfaceID, int32_t srcLeft
 
     if (0 > srcWidth) { srcLeft = 0; srcTop = 0; srcWidth = texW; srcHeight = texH; }
 
-    // Texture is bottom-up in GL; GML src is top-down, so flip V.
     float u0 = (float) srcLeft / (float) texW;
+    float v0 = (float) srcTop / (float) texH;
     float u1 = (float) (srcLeft + srcWidth) / (float) texW;
-    float v1 = (float) srcTop / (float) texH;
-    float v0 = (float) (srcTop + srcHeight) / (float) texH;
+    float v1 = (float) (srcTop + texH) / (float) texH;
 
     float localX1 = (float) srcWidth;
     float localY1 = (float) srcHeight;
@@ -2005,14 +2048,50 @@ static void glDrawSurface(Renderer* renderer, int32_t surfaceID, int32_t srcLeft
         0.0f,
         localX1,
         localY1,
-        // The Y (V) is flipped on purpose!
         u0,
-        v1,
-        u1,
         v0,
+        u1,
+        v1,
         xscale,
         yscale,
         angleDeg,
+        color,
+        alpha
+    );
+}
+
+static void glDrawSurfaceTiled(Renderer* renderer, int32_t surfaceID, float x, float y, float xscale, float yscale, float roomW, float roomH, uint32_t color, float alpha) {
+    GLRenderer* gl = (GLRenderer*) renderer;
+
+    if (0 > surfaceID || (uint32_t) surfaceID >= gl->surfaceCount) return;
+    if (gl->surfaceTexture[surfaceID] == 0) return;
+
+    GLuint texId = gl->surfaceTexture[surfaceID];
+    int32_t texW = gl->surfaceWidth[surfaceID];
+    int32_t texH = gl->surfaceHeight[surfaceID];
+
+    float tileW = (float) texW * fabsf(xscale);
+    float tileH = (float) texH * fabsf(yscale);
+
+    drawTiled(
+        gl,
+        texId,
+        x,
+        y,
+        tileW,
+        tileH,
+        true,
+        true,
+        roomW,
+        roomH,
+        0.0f,
+        xscale * (float) texW,
+        0.0f,
+        yscale * (float) texH,
+        0.0f,
+        0.0f,
+        1.0f,
+        1.0f,
         color,
         alpha
     );
@@ -2447,7 +2526,7 @@ Renderer* GLRenderer_create(void) {
     glVtable.gpuSetFog = glGpuSetFog;
     glVtable.gpuGetBlendEnable = glGpuGetBlendEnable;
     glVtable.drawTile = nullptr;
-    glVtable.drawTiled = glDrawTiled;
+    glVtable.drawSpriteTiled = glDrawSpriteTiled;
     glVtable.createSurface = glCreateSurface;
     glVtable.surfaceExists = glSurfaceExists;
     glVtable.setRenderTarget = glSetRenderTarget;
@@ -2457,6 +2536,7 @@ Renderer* GLRenderer_create(void) {
     glVtable.getSurfaceWidth = glGetSurfaceWidth;
     glVtable.getSurfaceHeight = glGetSurfaceHeight;
     glVtable.drawSurface = glDrawSurface;
+    glVtable.drawSurfaceTiled = glDrawSurfaceTiled;
     glVtable.surfaceResize = glSurfaceResize;
     glVtable.surfaceFree = glSurfaceFree;
     glVtable.gpuSetShader = glGpuSetShader,

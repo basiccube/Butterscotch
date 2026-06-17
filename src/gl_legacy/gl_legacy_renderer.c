@@ -403,7 +403,7 @@ static void glDrawSprite(Renderer* renderer, int32_t tpagIndex, float x, float y
     PS3_PALETTED_END();
 }
 
-static void glDrawTiled(Renderer* renderer, int32_t tpagIndex, float originX, float originY, float x, float y, float xscale, float yscale, bool tileX, bool tileY, float roomW, float roomH, uint32_t color, float alpha) {
+static void glDrawSpriteTiled(Renderer* renderer, int32_t tpagIndex, float originX, float originY, float x, float y, float xscale, float yscale, bool tileX, bool tileY, float roomW, float roomH, uint32_t color, float alpha) {
     GLLegacyRenderer* gl = (GLLegacyRenderer*) renderer;
     DataWin* dw = renderer->dataWin;
 
@@ -1538,8 +1538,10 @@ static bool resolveSurfaceTexture(GLLegacyRenderer* gl, int32_t surfaceId, GLuin
     return true;
 }
 
-// Surface textures are stored with Y=0 at the bottom (OpenGL convention), but GML treats
-// surfaces top-down, so we sample with V flipped (v0=1, v1=0) when drawing them.
+static void glLegacyDrawSurfaceTiled(MAYBE_UNUSED Renderer* renderer, MAYBE_UNUSED int32_t surfaceID, MAYBE_UNUSED float x, MAYBE_UNUSED float y, MAYBE_UNUSED float xscale, MAYBE_UNUSED float yscale, MAYBE_UNUSED float roomW, MAYBE_UNUSED float roomH, MAYBE_UNUSED uint32_t color, MAYBE_UNUSED float alpha) {
+    // No-op
+}
+
 static void glLegacyDrawSurface(Renderer* renderer, int32_t surfaceId, int32_t srcLeft, int32_t srcTop, int32_t srcWidth, int32_t srcHeight, float x, float y, float xscale, float yscale, float angleDeg, uint32_t color, float alpha) {
     GLLegacyRenderer* gl = (GLLegacyRenderer*) renderer;
     GLuint texId;
@@ -1727,7 +1729,7 @@ Renderer* GLLegacyRenderer_create(void) {
     glVtable.gpuGetColorWriteEnable = glGpuGetColorWriteEnable;
     glVtable.gpuGetBlendEnable = glGpuGetBlendEnable;
     glVtable.drawTile = nullptr;
-    glVtable.drawTiled = glDrawTiled;
+    glVtable.drawSpriteTiled = glDrawSpriteTiled;
     glVtable.createSurface = glLegacyCreateSurface;
     glVtable.surfaceExists = glLegacySurfaceExists;
     glVtable.setRenderTarget = glLegacySetRenderTarget;
@@ -1735,6 +1737,7 @@ Renderer* GLLegacyRenderer_create(void) {
     glVtable.getSurfaceWidth = glLegacyGetSurfaceWidth;
     glVtable.getSurfaceHeight = glLegacyGetSurfaceHeight;
     glVtable.drawSurface = glLegacyDrawSurface;
+    glVtable.drawSurfaceTiled = glLegacyDrawSurfaceTiled;
     glVtable.surfaceResize = glLegacySurfaceResize;
     glVtable.surfaceFree = glLegacySurfaceFree;
     glVtable.surfaceCopy = glLegacySurfaceCopy;
