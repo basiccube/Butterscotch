@@ -2707,6 +2707,34 @@ static RValue builtin_move_snap(VMContext* ctx, RValue* args, MAYBE_UNUSED int32
     return RValue_makeReal(0.0);
 }
 
+static RValue builtin_move_wrap(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
+    bool hor = RValue_toBool(args[0]);
+    bool vert = RValue_toBool(args[1]);
+    GMLReal margin = RValue_toReal(args[1]);
+    Instance* inst = ctx->currentInstance;
+    if (hor) {
+        if (inst->x < -margin) {
+            inst->x = (float)(inst->x + ctx->runner->currentRoom->width + 2 * margin);
+            SpatialGrid_markInstanceAsDirty(ctx->runner->spatialGrid, inst);
+        }
+        if (inst->x > ctx->runner->currentRoom->width + margin) {
+            inst->x = (float)(inst->x - ctx->runner->currentRoom->width - 2 * margin);
+            SpatialGrid_markInstanceAsDirty(ctx->runner->spatialGrid, inst);
+        }
+    }
+    if (vert) {
+        if (inst->y < -margin) {
+            inst->y = (float)(inst->y + ctx->runner->currentRoom->height + 2 * margin);
+            SpatialGrid_markInstanceAsDirty(ctx->runner->spatialGrid, inst);
+        }
+        if (inst->y > ctx->runner->currentRoom->height + margin) {
+            inst->y = (float)(inst->y - ctx->runner->currentRoom->height - 2 * margin);
+            SpatialGrid_markInstanceAsDirty(ctx->runner->spatialGrid, inst);
+        }
+    }
+    return RValue_makeReal(0.0);
+}
+
 // For lengthdir: Anything that's 1e-4 > abs(result) should be coerced to 0 to avoid precision drift.
 // If not, precision drift can cause a LOT of issues, especially on platforms that use floats instead of doubles.
 static RValue builtin_lengthdir_x(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
@@ -15177,6 +15205,7 @@ void VMBuiltins_registerAll(VMContext* ctx) {
         VM_registerBuiltin(ctx, "action_move_point", builtin_move_towards_point);
     }
     VM_registerBuiltin(ctx, "move_snap", builtin_move_snap);
+    VM_registerBuiltin(ctx, "move_wrap", builtin_move_wrap);
     VM_registerBuiltin(ctx, "move_contact_solid", builtin_move_contact_solid);
     VM_registerBuiltin(ctx, "move_outside_solid", builtin_move_outside_solid);
     VM_registerBuiltin(ctx, "move_outside_all", builtin_move_outside_all);
