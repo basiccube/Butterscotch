@@ -3743,6 +3743,10 @@ static RValue variableScopedGet(VMContext* ctx, int32_t id, const char* name, bo
         Instance* inst = hmget(runner->instancesById, id);
         if (inst != nullptr && variableScopedMatches(inst, structOnly)) return variableInstanceGetOn(ctx, inst, name, originBuiltin);
         return RValue_makeUndefined();
+    } else if (id == INSTANCE_GLOBAL) {
+        Instance* targetInstance = ctx->globalScopeInstance;
+        if (variableScopedMatches(targetInstance, structOnly)) return variableInstanceGetOn(ctx, targetInstance, name, originBuiltin);
+        return RValue_makeUndefined();
     }
 
     // Object index: return value from first matching active instance.
@@ -3766,6 +3770,10 @@ static void variableScopedSet(VMContext* ctx, int32_t id, const char* name, RVal
     if (id >= INSTANCE_ID_BASE) {
         Instance* inst = hmget(runner->instancesById, id);
         if (inst != nullptr && variableScopedMatches(inst, structOnly)) variableInstanceSetOn(ctx, inst, name, val, originBuiltin);
+        return;
+    } else if (id == INSTANCE_GLOBAL) {
+        Instance* targetInstance = ctx->globalScopeInstance;
+        if (variableScopedMatches(targetInstance, structOnly)) variableInstanceSetOn(ctx, targetInstance, name, val, originBuiltin);
         return;
     }
 
@@ -3816,7 +3824,7 @@ static RValue builtin_variable_global_get(VMContext* ctx, RValue* args, int32_t 
 
 static RValue builtin_variable_global_set(VMContext* ctx, RValue* args, int32_t argCount) {
     if (2 > argCount || args[0].type != RVALUE_STRING) return RValue_makeUndefined();
-    variableScopedSet(ctx, INSTANCE_GLOBAL, args[0].string, args[1], false, "variable_instance_set");
+    variableScopedSet(ctx, INSTANCE_GLOBAL, args[0].string, args[1], false, "variable_global_set");
     return RValue_makeUndefined();
 }
 

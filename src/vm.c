@@ -522,7 +522,6 @@ static inline bool tryFastVarRead(VMContext* ctx, int32_t instanceType, Variable
         }
         case INSTANCE_GLOBAL: {
             Instance* inst = (Instance*) ctx->globalScopeInstance;
-            if (inst == nullptr) return false;
             RValue* slot = IntRValueHashMap_findSlot(&inst->selfVars, varDef->varID);
             if (slot == nullptr)
                 return false;
@@ -687,6 +686,8 @@ static RValue resolveVariableRead(VMContext* ctx, int32_t instanceType, uint32_t
             }
             return RValue_makeReal(0.0);
         }
+    } else if (instanceType == INSTANCE_GLOBAL) {
+        targetInstance = ctx->globalScopeInstance;
     } else if (instanceType == INSTANCE_OTHER) {
         if (ctx->otherInstance != nullptr) {
             targetInstance = (Instance*) ctx->otherInstance;
@@ -760,10 +761,6 @@ static RValue resolveVariableRead(VMContext* ctx, int32_t instanceType, uint32_t
 #endif
 
         return result;
-    }
-
-    if (instanceType == INSTANCE_GLOBAL) {
-        targetInstance = ctx->globalScopeInstance;
     }
 
     // Resolve the variable's scalar slot pointer for the target scope. Array-valued vars live inline as RVALUE_ARRAY in the same slot.
