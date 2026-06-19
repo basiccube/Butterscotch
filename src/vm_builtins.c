@@ -16022,17 +16022,19 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     // Collision
     VM_registerBuiltin(ctx, "place_meeting", builtin_place_meeting);
     VM_registerBuiltin(ctx, "collision_rectangle", builtin_collision_rectangle);
-    VM_registerBuiltin(ctx, "collision_rectangle_list", builtin_collision_rectangle_list);
     VM_registerBuiltin(ctx, "rectangle_in_rectangle", builtin_rectangle_in_rectangle);
     VM_registerBuiltin(ctx, "collision_line", builtin_collision_line);
     VM_registerBuiltin(ctx, "collision_point", builtin_collision_point);
     VM_registerBuiltin(ctx, "collision_circle", builtin_collision_circle);
     VM_registerBuiltin(ctx, "instance_place", builtin_instance_place);
-    VM_registerBuiltin(ctx, "instance_place_list", builtin_instance_place_list);
     VM_registerBuiltin(ctx, "instance_position", builtin_instance_position);
     VM_registerBuiltin(ctx, "position_meeting", builtin_position_meeting);
     VM_registerBuiltin(ctx, "place_free", builtin_place_free);
     VM_registerBuiltin(ctx, "place_empty", builtin_place_empty);
+    if (isGMS2) {
+        VM_registerBuiltin(ctx, "collision_rectangle_list", builtin_collision_rectangle_list);
+        VM_registerBuiltin(ctx, "instance_place_list", builtin_instance_place_list);
+    }
 
     // Motion planning
     VM_registerBuiltin(ctx, "mp_linear_step", builtin_mp_linear_step);
