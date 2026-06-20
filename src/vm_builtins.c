@@ -11610,7 +11610,7 @@ static RValue builtin_position_meeting(VMContext* ctx, RValue* args, int32_t arg
 
 // Misc stubs
 static RValue builtin_get_timer(VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
-    return RValue_makeReal((nowNanos() - ctx->runner->gameStartTime) / 1000000.0);
+    return RValue_makeReal((nowNanos() - ctx->runner->gameStartTime) / 1000.0);
 }
 
 static RValue builtin_action_set_alarm(VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
