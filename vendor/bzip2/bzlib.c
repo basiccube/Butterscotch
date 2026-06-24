@@ -28,6 +28,7 @@
      bzBuffToBuffDecompress.  Fixed.
 */
 
+#include "bzlib.h"
 #include "bzlib_private.h"
 
 
@@ -151,63 +152,7 @@ int BZ_API(BZ2_bzCompressInit)
                      int        verbosity,
                      int        workFactor )
 {
-   Int32   n;
-   EState* s;
-
-   if (!bz_config_ok()) return BZ_CONFIG_ERROR;
-
-   if (strm == NULL || 
-       blockSize100k < 1 || blockSize100k > 9 ||
-       workFactor < 0 || workFactor > 250)
-     return BZ_PARAM_ERROR;
-
-   if (workFactor == 0) workFactor = 30;
-   if (strm->bzalloc == NULL) strm->bzalloc = default_bzalloc;
-   if (strm->bzfree == NULL) strm->bzfree = default_bzfree;
-
-   s = BZALLOC( sizeof(EState) );
-   if (s == NULL) return BZ_MEM_ERROR;
-   s->strm = strm;
-
-   s->arr1 = NULL;
-   s->arr2 = NULL;
-   s->ftab = NULL;
-
-   n       = 100000 * blockSize100k;
-   s->arr1 = BZALLOC( n                  * sizeof(UInt32) );
-   s->arr2 = BZALLOC( (n+BZ_N_OVERSHOOT) * sizeof(UInt32) );
-   s->ftab = BZALLOC( 65537              * sizeof(UInt32) );
-
-   if (s->arr1 == NULL || s->arr2 == NULL || s->ftab == NULL) {
-      if (s->arr1 != NULL) BZFREE(s->arr1);
-      if (s->arr2 != NULL) BZFREE(s->arr2);
-      if (s->ftab != NULL) BZFREE(s->ftab);
-      if (s       != NULL) BZFREE(s);
-      return BZ_MEM_ERROR;
-   }
-
-   s->blockNo           = 0;
-   s->state             = BZ_S_INPUT;
-   s->mode              = BZ_M_RUNNING;
-   s->combinedCRC       = 0;
-   s->blockSize100k     = blockSize100k;
-   s->nblockMAX         = 100000 * blockSize100k - 19;
-   s->verbosity         = verbosity;
-   s->workFactor        = workFactor;
-
-   s->block             = (UChar*)s->arr2;
-   s->mtfv              = (UInt16*)s->arr1;
-   s->zbits             = NULL;
-   s->ptr               = (UInt32*)s->arr1;
-
-   strm->state          = s;
-   strm->total_in_lo32  = 0;
-   strm->total_in_hi32  = 0;
-   strm->total_out_lo32 = 0;
-   strm->total_out_hi32 = 0;
-   init_RL ( s );
-   prepare_new_block ( s );
-   return BZ_OK;
+    return BZ_PARAM_ERROR;
 }
 
 
@@ -360,127 +305,21 @@ Bool copy_output_until_stop ( EState* s )
 static
 Bool handle_compress ( bz_stream* strm )
 {
-   Bool progress_in  = False;
-   Bool progress_out = False;
-   EState* s = strm->state;
-   
-   while (True) {
-
-      if (s->state == BZ_S_OUTPUT) {
-         progress_out |= copy_output_until_stop ( s );
-         if (s->state_out_pos < s->numZ) break;
-         if (s->mode == BZ_M_FINISHING && 
-             s->avail_in_expect == 0 &&
-             isempty_RL(s)) break;
-         prepare_new_block ( s );
-         s->state = BZ_S_INPUT;
-         if (s->mode == BZ_M_FLUSHING && 
-             s->avail_in_expect == 0 &&
-             isempty_RL(s)) break;
-      }
-
-      if (s->state == BZ_S_INPUT) {
-         progress_in |= copy_input_until_stop ( s );
-         if (s->mode != BZ_M_RUNNING && s->avail_in_expect == 0) {
-            flush_RL ( s );
-            BZ2_compressBlock ( s, (Bool)(s->mode == BZ_M_FINISHING) );
-            s->state = BZ_S_OUTPUT;
-         }
-         else
-         if (s->nblock >= s->nblockMAX) {
-            BZ2_compressBlock ( s, False );
-            s->state = BZ_S_OUTPUT;
-         }
-         else
-         if (s->strm->avail_in == 0) {
-            break;
-         }
-      }
-
-   }
-
-   return progress_in || progress_out;
+    return False;
 }
 
 
 /*---------------------------------------------------*/
 int BZ_API(BZ2_bzCompress) ( bz_stream *strm, int action )
 {
-   Bool progress;
-   EState* s;
-   if (strm == NULL) return BZ_PARAM_ERROR;
-   s = strm->state;
-   if (s == NULL) return BZ_PARAM_ERROR;
-   if (s->strm != strm) return BZ_PARAM_ERROR;
-
-   preswitch:
-   switch (s->mode) {
-
-      case BZ_M_IDLE:
-         return BZ_SEQUENCE_ERROR;
-
-      case BZ_M_RUNNING:
-         if (action == BZ_RUN) {
-            progress = handle_compress ( strm );
-            return progress ? BZ_RUN_OK : BZ_PARAM_ERROR;
-         } 
-         else
-	 if (action == BZ_FLUSH) {
-            s->avail_in_expect = strm->avail_in;
-            s->mode = BZ_M_FLUSHING;
-            goto preswitch;
-         }
-         else
-         if (action == BZ_FINISH) {
-            s->avail_in_expect = strm->avail_in;
-            s->mode = BZ_M_FINISHING;
-            goto preswitch;
-         }
-         else 
-            return BZ_PARAM_ERROR;
-
-      case BZ_M_FLUSHING:
-         if (action != BZ_FLUSH) return BZ_SEQUENCE_ERROR;
-         if (s->avail_in_expect != s->strm->avail_in) 
-            return BZ_SEQUENCE_ERROR;
-         progress = handle_compress ( strm );
-         if (s->avail_in_expect > 0 || !isempty_RL(s) ||
-             s->state_out_pos < s->numZ) return BZ_FLUSH_OK;
-         s->mode = BZ_M_RUNNING;
-         return BZ_RUN_OK;
-
-      case BZ_M_FINISHING:
-         if (action != BZ_FINISH) return BZ_SEQUENCE_ERROR;
-         if (s->avail_in_expect != s->strm->avail_in) 
-            return BZ_SEQUENCE_ERROR;
-         progress = handle_compress ( strm );
-         if (!progress) return BZ_SEQUENCE_ERROR;
-         if (s->avail_in_expect > 0 || !isempty_RL(s) ||
-             s->state_out_pos < s->numZ) return BZ_FINISH_OK;
-         s->mode = BZ_M_IDLE;
-         return BZ_STREAM_END;
-   }
-   return BZ_OK; /*--not reached--*/
+    return BZ_PARAM_ERROR;
 }
 
 
 /*---------------------------------------------------*/
 int BZ_API(BZ2_bzCompressEnd)  ( bz_stream *strm )
 {
-   EState* s;
-   if (strm == NULL) return BZ_PARAM_ERROR;
-   s = strm->state;
-   if (s == NULL) return BZ_PARAM_ERROR;
-   if (s->strm != strm) return BZ_PARAM_ERROR;
-
-   if (s->arr1 != NULL) BZFREE(s->arr1);
-   if (s->arr2 != NULL) BZFREE(s->arr2);
-   if (s->ftab != NULL) BZFREE(s->ftab);
-   BZFREE(strm->state);
-
-   strm->state = NULL;   
-
-   return BZ_OK;
+    return BZ_PARAM_ERROR;
 }
 
 
@@ -1253,45 +1092,7 @@ int BZ_API(BZ2_bzBuffToBuffCompress)
                            int           verbosity, 
                            int           workFactor )
 {
-   bz_stream strm;
-   int ret;
-
-   if (dest == NULL || destLen == NULL || 
-       source == NULL ||
-       blockSize100k < 1 || blockSize100k > 9 ||
-       verbosity < 0 || verbosity > 4 ||
-       workFactor < 0 || workFactor > 250) 
-      return BZ_PARAM_ERROR;
-
-   if (workFactor == 0) workFactor = 30;
-   strm.bzalloc = NULL;
-   strm.bzfree = NULL;
-   strm.opaque = NULL;
-   ret = BZ2_bzCompressInit ( &strm, blockSize100k, 
-                              verbosity, workFactor );
-   if (ret != BZ_OK) return ret;
-
-   strm.next_in = source;
-   strm.next_out = dest;
-   strm.avail_in = sourceLen;
-   strm.avail_out = *destLen;
-
-   ret = BZ2_bzCompress ( &strm, BZ_FINISH );
-   if (ret == BZ_FINISH_OK) goto output_overflow;
-   if (ret != BZ_STREAM_END) goto errhandler;
-
-   /* normal termination */
-   *destLen -= strm.avail_out;   
-   BZ2_bzCompressEnd ( &strm );
-   return BZ_OK;
-
-   output_overflow:
-   BZ2_bzCompressEnd ( &strm );
-   return BZ_OUTBUFF_FULL;
-
-   errhandler:
-   BZ2_bzCompressEnd ( &strm );
-   return ret;
+    return BZ_PARAM_ERROR;
 }
 
 

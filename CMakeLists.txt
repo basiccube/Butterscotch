@@ -150,9 +150,8 @@ target_include_directories(butterscotch PUBLIC vendor/base64)
 
 # bzip2
 add_library(bzip2 STATIC
-    vendor/bzip2/blocksort.c
+    vendor/bzip2/bz_internal_error.c
     vendor/bzip2/bzlib.c
-    vendor/bzip2/compress.c
     vendor/bzip2/crctable.c
     vendor/bzip2/decompress.c
     vendor/bzip2/huffman.c
@@ -160,6 +159,7 @@ add_library(bzip2 STATIC
 )
 target_include_directories(bzip2 PUBLIC vendor/bzip2)
 target_compile_options(bzip2 PRIVATE -w)
+target_compile_definitions(bzip2 PRIVATE BZ_NO_STDIO)
 
 # Spatial grid logs
 option(ENABLE_SPATIAL_GRID_LOGS "Enable Spatial Grid logs" OFF)

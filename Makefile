@@ -13,7 +13,8 @@ endif
 DEFINES := -DENABLE_VM_GML_PROFILER \
 		   -DENABLE_VM_OPCODE_PROFILER \
 		   -DENABLE_VM_STUB_LOGS \
-		   -DENABLE_VM_TRACING
+		   -DENABLE_VM_TRACING \
+		   -DBZ_NO_STDIO
 INCLUDES := -I. -Isrc -Ivendor/stb/ds -Isrc/image -Ivendor/stb/image -Ivendor/stb/vorbis -Ivendor/md5 -Ivendor/sha1 -Ivendor/base64 -Ivendor/bzip2
 
 HEADERS := $(wildcard src/*.h) $(shell find vendor -name '*.h')
