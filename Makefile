@@ -13,7 +13,7 @@ ifeq ($(filter clean distclean,$(MAKECMDGOALS)),)
 -include compat/config.mk
 
 ifndef DISABLE_MMD
-DEPFLAGS = -MMD -MP -MF $(@:.o=.d)
+DEPFLAGS = -MMD -MP -MF $(@:.$(OBJ_EXT)=.d)
 endif
 
 # trigger configure re-run if $(CC) changes
@@ -45,7 +45,12 @@ HEADERS := $(wildcard src/*.h) $(shell find vendor -name '*.h')
 SRCS := $(wildcard src/*.c) $(wildcard src/image/*.c) $(wildcard vendor/bzip2/*.c) vendor/md5/md5.c vendor/sha1/sha1.c vendor/base64/base64.c
 
 DESKTOP_BACKEND := glfw3
+ifdef MSVC
+# miniaudio fails to build under MSVC for some reason
+AUDIO_BACKEND := none
+else
 AUDIO_BACKEND := miniaudio
+endif
 
 ifdef BUTTERSCOTCH_COMMIT_DATE
 DEFINES += $(DEFINE)BUTTERSCOTCH_COMMIT_DATE=\"$(BUTTERSCOTCH_COMMIT_DATE)\"
@@ -197,11 +202,11 @@ ifndef VERBOSE
 V := @
 endif
 
-OBJS := $(addprefix build/,$(SRCS:.c=.c.o))
+OBJS := $(addprefix build/,$(SRCS:.c=.c.$(OBJ_EXT)))
 
 all: build/butterscotch
 
--include $(OBJS:.o=.d)
+-include $(OBJS:.$(OBJ_EXT)=.d)
 
 ifeq ($(filter clean distclean,$(MAKECMDGOALS)),)
 
@@ -215,7 +220,7 @@ build/butterscotch: $(OBJS)
 	$(V)$(_CC) $(LDFLAGS) $(OBJS) $(LIBS) $(EXTRALIBS) $(OUTPUT_EXE)$@
 	@[ -f $@.exe ] && chmod +x $@.exe || true
 
-build/%.c.o: %.c compat/config.mk $(if $(DISABLE_MMD),$(HEADERS))
+build/%.c.$(OBJ_EXT): %.c compat/config.mk $(if $(DISABLE_MMD),$(HEADERS))
 	@mkdir -p $(dir $@)
 	@{ [ -z "$(NO_COLOR)" ] && [ -t 1 ]; } && printf " \033[1;32mCC\033[0m $<\n" || printf " CC $<\n"
 	$(V)$(_CC) $(DEFINES) $(INCLUDES) $(CFLAGS) $(DEPFLAGS) $(COMPILE_OBJ) $< $(OUTPUT_OBJ)$@
