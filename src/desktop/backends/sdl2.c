@@ -10,7 +10,6 @@
 #include "runner_mouse.h"
 
 static Runner *g_runner;
-static bool gFullscreen = false;
 static SDL_Surface* scr;
 static SDL_Window *window;
 static SDL_GameController* openControllers[MAX_GAMEPADS];
@@ -29,7 +28,7 @@ static SDL_Window *tryOpenWindow(int reqW, int reqH, const char* title, Uint32 f
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 1);
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, 0);
-
+        
         SDL_Window *newWindow = SDL_CreateWindow(
             title,
             SDL_WINDOWPOS_UNDEFINED,
@@ -46,7 +45,7 @@ static SDL_Window *tryOpenWindow(int reqW, int reqH, const char* title, Uint32 f
         }
         return NULL;
     }
-    for (size_t i = 0; i < sizeof(GLCommon_versions)/sizeof(GLCommon_versions[0]); i++) {
+    for (size_t i = 0; i < sizeof(GLCommon_versions)/sizeof(GLCommon_versions[0]); i++) {        
         SDL_Window *newWindow;
         int contextFlags = 0;
 
@@ -61,16 +60,16 @@ static SDL_Window *tryOpenWindow(int reqW, int reqH, const char* title, Uint32 f
 
         if (GLCommon_versions[i].gles) {
             SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
-        } else {
+        } else {            
             if (GLCommon_versions[i].major >= 3) {
                 if (GLCommon_versions[i].major == 3 && GLCommon_versions[i].minor == 2) {
                     contextFlags |= SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG;
                 }
             } else {
-                SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, 0);
+                SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, 0); 
             }
         }
-
+        
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, contextFlags);
 
         newWindow = SDL_CreateWindow(
@@ -87,7 +86,7 @@ static SDL_Window *tryOpenWindow(int reqW, int reqH, const char* title, Uint32 f
             }
             SDL_DestroyWindow(newWindow);
         }
-
+        
     }
     return NULL;
 }
@@ -117,10 +116,6 @@ bool platformGetWindowSize(int32_t* outW, int32_t* outH) {
         *outH = h;
     }
     return true;
-}
-
-static bool platformGetWindowFullscreen() {
-	return gFullscreen;
 }
 
 bool platformGetScaledWindowSize(int32_t* outW, int32_t* outH) {
@@ -153,50 +148,6 @@ void platformSetWindowSize(int32_t width, int32_t height) {
 
     if (gfx == SOFTWARE)
         scr = SDL_GetWindowSurface(window);
-}
-
-static void platformSetWindowFullscreen(bool fullscreen) {
-    if (!window) return;
-
-    static int savedWindowW = 0;
-    static int savedWindowH = 0;
-
-    if (!gFullscreen) {
-        platformGetWindowSize(&savedWindowW, &savedWindowH);
-    }
-
-    Uint32 flags = fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0;
-
-    if (SDL_SetWindowFullscreen(window, flags) == 0) {
-        gFullscreen = fullscreen;
-
-        int winW, winH;
-        SDL_GetWindowSize(window, &winW, &winH);
-
-        if (savedWindowW > 0 && savedWindowH > 0) {
-            int scaleX = winW / savedWindowW;
-            int scaleY = winH / savedWindowH;
-            int scale = (scaleX < scaleY) ? scaleX : scaleY;
-            if (scale < 1) scale = 1;
-
-            int viewWidth = savedWindowW * scale;
-            int viewHeight = savedWindowH * scale;
-
-            int viewX = (winW - viewWidth) / 2;
-            int viewY = (winH - viewHeight) / 2;
-
-            typedef void (SDLCALL *PFNGLVIEWPORTPROC)(int x, int y, int width, int height);
-            static PFNGLVIEWPORTPROC local_glViewport = NULL;
-
-            if (!local_glViewport) {
-                local_glViewport = (PFNGLVIEWPORTPROC)SDL_GL_GetProcAddress("glViewport");
-            }
-
-            if (local_glViewport) {
-                local_glViewport(viewX, viewY, viewWidth, viewHeight);
-            }
-        }
-    }
 }
 
 void platformGetMousePos(double *xPos, double *yPos) {
@@ -232,14 +183,14 @@ bool platformInit(int reqW, int reqH, const char *title, bool headless) {
 #if SDL_VERSION_ATLEAST(2, 0, 1)
     flags |= SDL_WINDOW_ALLOW_HIGHDPI;
 #endif
-
+    
     window = tryOpenWindow(reqW, reqH, title, flags);
-
+    
     if (!window && gfx != SOFTWARE) {
         fprintf(stderr, "Fatal: Could not open window: %s\n", SDL_GetError());
         return false;
     }
-
+    
     if (!window && gfx == SOFTWARE) {
         SDL_DisplayMode mode;
         if (SDL_GetDisplayMode(0, 0, &mode) == 0) {
@@ -323,8 +274,6 @@ void platformInitFunctions(Runner *runner) {
     runner->windowHasFocus = platformGetWindowFocus;
     runner->setCursor = platformSetCursor;
     runner->currentCursor = GML_CR_DEFAULT;
-	runner->getWindowFullscreen = platformGetWindowFullscreen;
-	runner->setWindowFullscreen = platformSetWindowFullscreen;
 }
 
 #ifdef ENABLE_SW_RENDERER

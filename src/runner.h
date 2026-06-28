@@ -499,8 +499,6 @@ struct Runner {
     void (*setWindowTitle)(const char* title);
     bool (*getWindowSize)(int32_t* outW, int32_t* outH);
     void (*setWindowSize)(int32_t width, int32_t height);
-	bool (*getWindowFullscreen)(void);
-    void (*setWindowFullscreen)(bool fullscreen);
     bool (*windowHasFocus)(void);
     void (*setCursor)(int32_t cursorType);
     int32_t currentCursor;  // last value passed to window_set_cursor
@@ -540,7 +538,7 @@ struct Runner {
     DsMapEntry** dsMapPool; // stb_ds array of stb_ds hashmaps
     DsList* dsListPool; // stb_ds array of DsList
     DsQueue* dsQueuePool; // stb_ds array of DsQueue
-    DsStack* dsStackPool; // stb_ds array of DsStack
+    DsStack* dsStackPool; // stb_ds array of DsStack    
     DsPriority* dsPriorityPool; // stb_ds array of DsPriority
     DsGrid* dsGridPool; // stb_ds array of DsGrid
     GmlBuffer* gmlBufferPool; // stb_ds array of GmlBuffer

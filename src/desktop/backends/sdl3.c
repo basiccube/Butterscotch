@@ -12,7 +12,6 @@
 
 static Runner *g_runner;
 static int32_t fbWidth, fbHeight;
-static bool gFullscreen = false;
 static SDL_Surface* scr;
 static SDL_Window *window;
 static SDL_Gamepad* openControllers[MAX_GAMEPADS];
@@ -49,7 +48,7 @@ static SDL_Window *tryOpenWindow(int reqW, int reqH, const char* title, Uint32 f
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 1);
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, 0);
-
+        
         SDL_Window *newWindow = SDL_CreateWindow(
             title,
             reqW,
@@ -79,16 +78,16 @@ static SDL_Window *tryOpenWindow(int reqW, int reqH, const char* title, Uint32 f
 
         if (GLCommon_versions[i].gles) {
             SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
-        } else {
+        } else {            
             if (GLCommon_versions[i].major >= 3) {
                 if (GLCommon_versions[i].major == 3 && GLCommon_versions[i].minor == 2) {
                     contextFlags |= SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG;
                 }
             } else {
-                SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, 0);
+                SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, 0); 
             }
         }
-
+        
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, contextFlags);
 
         newWindow = SDL_CreateWindow(
@@ -104,7 +103,7 @@ static SDL_Window *tryOpenWindow(int reqW, int reqH, const char* title, Uint32 f
             }
             SDL_DestroyWindow(newWindow);
         }
-
+        
     }
     return NULL;
 }
@@ -122,10 +121,6 @@ bool platformGetWindowSize(int32_t* outW, int32_t* outH) {
     return true;
 }
 
-static bool platformGetWindowFullscreen() {
-    return gFullscreen;
-}
-
 bool platformGetScaledWindowSize(int32_t* outW, int32_t* outH) {
     return platformGetWindowSize(outW, outH);
 }
@@ -137,12 +132,6 @@ void platformSetWindowSize(int32_t width, int32_t height) {
     SDL_SetWindowSize(window, width, height);
     if (gfx == SOFTWARE)
         scr = SDL_GetWindowSurface(window);
-}
-
-static void platformSetWindowFullscreen(bool fullscreen) {
-	if (!window) return;
-    if (SDL_SetWindowFullscreen(window, fullscreen))
-	    gFullscreen = fullscreen;
 }
 
 void platformGetMousePos(double *xPos, double *yPos) {
@@ -173,22 +162,22 @@ bool platformInit(int reqW, int reqH, const char *title, bool headless) {
     fbHeight = reqH;
 
     window = tryOpenWindow(fbWidth, fbHeight, title, flags);
-
+    
     if (!window && gfx != SOFTWARE) {
         fprintf(stderr, "Fatal: Could not open window: %s\n", SDL_GetError());
         return false;
     }
-
+    
     if (!window && gfx == SOFTWARE) {
         const SDL_DisplayMode *mode = SDL_GetDesktopDisplayMode(SDL_GetPrimaryDisplay());
         if (mode != NULL) {
-            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, 
                         "Warning: %dx%d unavailable, falling back to %dx%d: %s",
                         fbWidth, fbHeight, mode->w, mode->h, SDL_GetError());
-
+            
             fbWidth = mode->w;
             fbHeight = mode->h;
-
+            
             window = SDL_CreateWindow(title, fbWidth, fbHeight, flags);
         }
     }
@@ -242,8 +231,6 @@ void platformInitFunctions(Runner *runner) {
     runner->windowHasFocus = platformGetWindowFocus;
     runner->setCursor = platformSetCursor;
     runner->currentCursor = GML_CR_DEFAULT;
-	runner->getWindowFullscreen = platformGetWindowFullscreen;
-	runner->setWindowFullscreen = platformSetWindowFullscreen;
 }
 
 #ifdef ENABLE_SW_RENDERER
