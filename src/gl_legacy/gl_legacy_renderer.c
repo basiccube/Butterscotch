@@ -49,7 +49,7 @@ static bool hasFBO() {
 #ifdef PLATFORM_PS3
     return true;
 #else
-    return (glGenFramebuffers || glGenFramebuffersEXT);
+    return (glGenFramebuffers || (glGenFramebuffersEXT && glBlitFramebufferEXT));
 #endif
 }
 
