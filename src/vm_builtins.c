@@ -12454,6 +12454,22 @@ static RValue builtin_tile_layer_find(VMContext* ctx, RValue* args, MAYBE_UNUSED
     return RValue_makeReal(-1.0);
 }
 
+// tile_layer_depth(depth, newdepth) - changes the depth of all tiles at the given depth to the new depth.
+static RValue builtin_tile_layer_depth(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
+    Runner* runner = ctx->runner;
+    Room* room = runner->currentRoom;
+    if (room == nullptr) return RValue_makeUndefined();
+    int32_t depth = RValue_toInt32(args[0]);
+    int32_t newdepth = RValue_toInt32(args[1]);
+    for (int32_t i = 0; i < (int32_t) room->tileCount; i++) {
+        RoomTile* tile = &room->tiles[i];
+        if (tile->tileDepth != depth) continue;
+		tile->tileDepth = newdepth;
+        runner->drawableListSortDirty = true;
+    }
+    return RValue_makeUndefined();
+}
+
 // tile_layer_delete(depth) - removes every tile at the given depth from the current room.
 static RValue builtin_tile_layer_delete(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
     Runner* runner = ctx->runner;
@@ -16527,6 +16543,7 @@ void VMBuiltins_registerAll(VMContext* ctx) {
         VM_registerBuiltin(ctx, "tile_add", builtin_tile_add);
         VM_registerBuiltin(ctx, "tile_exists", builtin_tile_exists);
         VM_registerBuiltin(ctx, "tile_layer_find", builtin_tile_layer_find);
+		VM_registerBuiltin(ctx, "tile_layer_depth", builtin_tile_layer_depth);
         VM_registerBuiltin(ctx, "tile_layer_delete", builtin_tile_layer_delete);
 		VM_registerBuiltin(ctx, "tile_layer_delete_at", builtin_tile_layer_delete_at);
         VM_registerBuiltin(ctx, "tile_delete", builtin_tile_delete);
