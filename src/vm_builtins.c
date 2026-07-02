@@ -9364,7 +9364,7 @@ static RValue builtin_filename_change_ext(MAYBE_UNUSED VMContext* ctx, MAYBE_UNU
 
     if (last != nullptr && last != 0) {
         long index = last - fname;
-        char* new_name = safeMalloc(index + strlen(newext) + 1);
+        char* new_name = (char* )safeMalloc(index + strlen(newext) + 1);
         memcpy(new_name, fname, (size_t) index);
         memcpy(new_name + index, newext, (size_t) strlen(newext));
         new_name[index + strlen(newext)] = '\0';
