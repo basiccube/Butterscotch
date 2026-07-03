@@ -853,7 +853,7 @@ static void parseSPRT(BinaryReader* reader, DataWin* dw, bool skipLoadingPrecise
     free(ptrs);
 }
 
-static void parseBGND(BinaryReader* reader, DataWin* dw) {
+static void parseBGND(BinaryReader* reader, DataWin* dw, uint32_t chunkEnd) {
     Bgnd* b = &dw->bgnd;
 
     uint32_t count;
@@ -861,6 +861,45 @@ static void parseBGND(BinaryReader* reader, DataWin* dw) {
     b->count = count;
 
     if (count == 0) { free(ptrs); b->backgrounds = nullptr; return; }
+
+    // GM 2024.14.1 added tile separation parameters for each background
+    // To detect it, we'll check if the background's end position is at the chunks end position (if there's only one background) or the start of the next background
+    // If it isn't at either of those, then that means it is 2024.14.1+
+    if (DataWin_isVersionAtLeast(dw, 2024, 13, 0, 0) && !DataWin_isVersionAtLeast(dw, 2024, 14, 1, 0)) {
+        repeat(count, i) {
+            if (ptrs[i] == 0) continue;
+
+            // Skip to where the item per tile count + tile count should be in pre-2024.14.1 versions
+            BinaryReader_seek(reader, ptrs[i] + (11 * 4));
+            uint32_t itemsPerTileCount = BinaryReader_readUint32(reader);
+            uint32_t tileCount = BinaryReader_readUint32(reader);
+
+            // Get what might be the end position to compare it with the actual end position
+            size_t tpos = ptrs[i] + (16 * 4) + (itemsPerTileCount * tileCount * 4);
+            if (count >= 2 && i < count - 1) {
+                // Next thing at end position is a background
+
+                // Align to 8 bytes
+                if ((tpos % 8) != 0) tpos += 8 - (tpos % 8);
+
+                if (tpos != ptrs[i + 1]) {
+                    DataWin_bumpVersionTo(dw, 2024, 14, 1, 0);
+                    break;
+                }
+            }
+            else {
+                // Next thing at end position is the end of the chunk
+
+                // Align to 16 bytes
+                if ((tpos % 16) != 0) tpos += 16 - (tpos % 16);
+
+                if (tpos != chunkEnd) {
+                    DataWin_bumpVersionTo(dw, 2024, 14, 1, 0);
+                    break;
+                }
+            }
+        }
+    }
 
     b->backgrounds = (Background *)safeCalloc(count, sizeof(Background));
     repeat(count, i) {
@@ -878,7 +917,7 @@ static void parseBGND(BinaryReader* reader, DataWin* dw) {
             bg->gms2UnknownAlways2 = BinaryReader_readUint32(reader);
             bg->gms2TileWidth = BinaryReader_readUint32(reader);
             bg->gms2TileHeight = BinaryReader_readUint32(reader);
-            if (DataWin_isVersionAtLeast(dw, 2024, 14, 0, 1)) {
+            if (DataWin_isVersionAtLeast(dw, 2024, 14, 1, 0)) {
                 bg->gms2TileSeparationX = BinaryReader_readUint32(reader);
                 bg->gms2TileSeparationY = BinaryReader_readUint32(reader);
             }
@@ -2614,7 +2653,7 @@ DataWin* DataWin_parse(const char* filePath, DataWinParserOptions options) {
         } else if (options.parseSprt && memcmp(chunkName, "SPRT", 4) == 0) {
             parseSPRT(&reader, dw, options.skipLoadingPreciseMasksForNonPreciseSprites);
         } else if (options.parseBgnd && memcmp(chunkName, "BGND", 4) == 0) {
-            parseBGND(&reader, dw);
+            parseBGND(&reader, dw, chunkEnd);
         } else if (options.parsePath && memcmp(chunkName, "PATH", 4) == 0) {
             parsePATH(&reader, dw);
         } else if (options.parseScpt && memcmp(chunkName, "SCPT", 4) == 0) {
