@@ -1050,6 +1050,7 @@ int main(int argc, char* argv[]) {
         options.skipLoadingPreciseMasksForNonPreciseSprites = true;
         options.loadType = args.loadType;
         options.lazyLoadRooms = args.lazyRooms;
+        options.lazyLoadTextures = args.lazyTextures;
         options.eagerlyLoadedRooms = args.eagerRooms;
         DataWin* dataWin = DataWin_parse(currentDataWinPath, options);
 
