@@ -2255,6 +2255,23 @@ static RValue builtin_string_starts_with(MAYBE_UNUSED VMContext* ctx, RValue* ar
     return RValue_makeBool(ret);
 }
 
+// Source - https://stackoverflow.com/a/744822
+static RValue builtin_string_ends_with(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
+    if (2 > argCount) return RValue_makeInt32(0);
+    char* str = RValue_toString(args[0]);
+	char* substr = RValue_toString(args[1]);
+
+	size_t strLen = strlen(str);
+	size_t substrLen = strlen(substr);
+	if (substrLen > strLen)
+		return RValue_makeBool(false);
+    bool ret = (strncmp(str + strLen - substrLen, substr, substrLen) == 0);
+
+    free(substr);
+    free(str);
+    return RValue_makeBool(ret);
+}
+
 static RValue builtin_ord(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
     if (1 > argCount || args[0].type != RVALUE_STRING || args[0].string == nullptr || args[0].string[0] == '\0') {
         return RValue_makeReal(0.0);
@@ -16285,6 +16302,7 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "string_format", builtin_string_format);
     VM_registerBuiltin(ctx, "string_count", builtin_string_count);
     VM_registerBuiltin(ctx, "string_starts_with", builtin_string_starts_with);
+	VM_registerBuiltin(ctx, "string_ends_with", builtin_string_ends_with);
     VM_registerBuiltin(ctx, "ord", builtin_ord);
     VM_registerBuiltin(ctx, "chr", builtin_chr);
 
