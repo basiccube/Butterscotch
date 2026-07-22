@@ -2257,7 +2257,7 @@ static RValue builtin_string_starts_with(MAYBE_UNUSED VMContext* ctx, RValue* ar
 
 // Source - https://stackoverflow.com/a/744822
 static RValue builtin_string_ends_with(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
-    if (2 > argCount) return RValue_makeInt32(0);
+    if (2 > argCount) return RValue_makeBool(false);
     char* str = RValue_toString(args[0]);
 	char* substr = RValue_toString(args[1]);
 
