@@ -2263,9 +2263,12 @@ static RValue builtin_string_ends_with(MAYBE_UNUSED VMContext* ctx, RValue* args
 
 	size_t strLen = strlen(str);
 	size_t substrLen = strlen(substr);
-	if (substrLen > strLen)
+	if (substrLen > strLen) {
+		free(substr);
+		free(str);
 		return RValue_makeBool(false);
-    bool ret = (strncmp(str + strLen - substrLen, substr, substrLen) == 0);
+	}
+    bool ret = (memcmp(str + strLen - substrLen, substr, substrLen) == 0);
 
     free(substr);
     free(str);
