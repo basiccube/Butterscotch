@@ -2244,11 +2244,11 @@ static RValue builtin_string_count(MAYBE_UNUSED VMContext* ctx, RValue* args, in
 
 // Source - https://stackoverflow.com/a/15515276
 static RValue builtin_string_starts_with(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
-    if (2 > argCount) return RValue_makeInt32(0);
-    char* substr = RValue_toString(args[0]);
-    char* str = RValue_toString(args[1]);
+    if (2 > argCount) return RValue_makeBool(false);
+    char* str = RValue_toString(args[0]);
+	char* substr = RValue_toString(args[1]);
 
-    bool ret = (strncmp(str, substr, strlen(substr)) == 0);
+    bool ret = (memcmp(str, substr, strlen(substr)) == 0);
 
     free(substr);
     free(str);
